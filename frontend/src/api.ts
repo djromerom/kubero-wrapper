@@ -64,6 +64,40 @@ export interface ClusterStatus {
   memory_usage: number;
 }
 
+export interface GithubRepository {
+  id: number;
+  name: string;
+  full_name: string;
+  html_url: string;
+  clone_url?: string;
+}
+
+export interface GithubBranch {
+  name: string;
+}
+
+export interface GithubRepositoriesResponse {
+  repositories: GithubRepository[];
+}
+
+export interface GithubBranchesResponse {
+  owner: string;
+  repository: string;
+  branches: GithubBranch[];
+}
+
+export interface GithubLatestCommitResponse {
+  owner: string;
+  repository: string;
+  branch: string;
+  commit: {
+    sha: string;
+    commit: {
+      message: string;
+    };
+  };
+}
+
 export const api = {
   health: () => request<{ status: string }>('/health'),
 
@@ -88,6 +122,19 @@ export const api = {
 
   getWebhook: (id: string) =>
     request<{ webhook_url: string; webhook_secret: string }>(`/projects/${id}/webhook`),
+
+  githubConnect: () => {
+    window.location.assign('/api/github/connect');
+  },
+
+  listGithubRepositories: () =>
+    request<GithubRepositoriesResponse>('/github/repositories'),
+
+  listGithubBranches: (owner: string, repo: string) =>
+    request<GithubBranchesResponse>(`/github/repositories/${owner}/${repo}/branches`),
+
+  getLatestCommit: (owner: string, repo: string, branch: string) =>
+    request<GithubLatestCommitResponse>(`/github/repositories/${owner}/${repo}/latest-commit?branch=${encodeURIComponent(branch)}`),
 
   adminListProjects: () => request<Project[]>('/admin/projects'),
 

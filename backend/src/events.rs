@@ -2,7 +2,6 @@ use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
 use serde_json::Value;
 use tokio::sync::broadcast;
-use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct EventBus {
@@ -17,18 +16,22 @@ pub struct Event {
 }
 
 impl EventBus {
-    pub fn new(redis_url: &str) -> Self {
+    pub async fn new(redis_url: &str) -> Self {
         let (tx, _) = broadcast::channel(256);
 
-        let redis = match ConnectionManager::new(
-            redis::Client::open(redis_url).unwrap()
-        ).connect() {
-            Ok(conn) => {
-                tracing::info!("Connected to Redis");
-                Some(conn)
-            }
-            Err(e) => {
-                tracing::warn!("Redis not available, using local event bus only: {}", e);
+        let redis = match redis::Client::open(redis_url) {
+            Ok(client) => match ConnectionManager::new(client).await {
+                Ok(conn) => {
+                    tracing::info!("Connected to Redis");
+                    Some(conn)
+                }
+                Err(error) => {
+                    tracing::warn!("Redis not available, using local event bus only: {}", error);
+                    None
+                }
+            },
+            Err(error) => {
+                tracing::warn!("Invalid Redis configuration, using local event bus only: {}", error);
                 None
             }
         };
@@ -42,7 +45,7 @@ impl EventBus {
             payload: payload.clone(),
         };
 
-        if let Some(ref mut conn) = self.redis {
+        if let Some(mut conn) = self.redis.clone() {
             let msg = serde_json::to_string(&payload).unwrap_or_default();
             let _: Result<(), _> = conn.publish(channel, msg).await;
         }

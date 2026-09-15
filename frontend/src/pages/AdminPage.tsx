@@ -1,92 +1,19 @@
-import { useState, useEffect } from 'react';
-import { api, type Project, type ClusterStatus } from '../api';
-import StatusBadge from '../components/StatusBadge';
-
+import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { api, type Project } from '../api';
+import { reviewDemoProject, type DemoProject } from '../demoProjects';
+import { getDemoUser } from '../demoSession';
+import ProjectCard from '../components/ProjectCard';
 export default function AdminPage() {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [cluster, setCluster] = useState<ClusterStatus | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const load = async () => {
-    setLoading(true);
-    try {
-      const [p, c] = await Promise.all([
-        api.adminListProjects(),
-        api.clusterStatus().catch(() => null),
-      ]);
-      setProjects(p);
-      setCluster(c);
-    } catch {
-      setProjects([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { load(); }, []);
-
-  return (
-    <div>
-      <h1 className="text-2xl font-bold mb-6">Admin Panel</h1>
-
-      {cluster && (
-        <div className="grid grid-cols-3 gap-4 mb-6">
-          <div className="bg-gray-800 rounded-lg p-4">
-            <p className="text-sm text-gray-400">Nodes</p>
-            <p className="text-2xl font-bold">{cluster.nodes}</p>
-          </div>
-          <div className="bg-gray-800 rounded-lg p-4">
-            <p className="text-sm text-gray-400">Pods</p>
-            <p className="text-2xl font-bold">{cluster.pods}</p>
-          </div>
-          <div className="bg-gray-800 rounded-lg p-4">
-            <p className="text-sm text-gray-400">Memory</p>
-            <p className="text-2xl font-bold">{cluster.memory_usage.toFixed(1)}%</p>
-          </div>
-        </div>
-      )}
-
-      <div className="bg-gray-800 rounded-lg p-4">
-        <h3 className="font-semibold mb-4">All Projects</h3>
-        {loading ? (
-          <p className="text-gray-400">Loading...</p>
-        ) : (
-          <table className="w-full text-left">
-            <thead>
-              <tr className="text-gray-400 text-sm border-b border-gray-700">
-                <th className="py-2">Name</th>
-                <th className="py-2">Owner</th>
-                <th className="py-2">Status</th>
-                <th className="py-2">Domain</th>
-                <th className="py-2">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {projects.map(p => (
-                <tr key={p.id} className="border-b border-gray-700">
-                  <td className="py-3">{p.name}</td>
-                  <td className="py-3 text-gray-400">{p.repo_url}</td>
-                  <td className="py-3"><StatusBadge status={p.status} /></td>
-                  <td className="py-3 text-sm text-gray-400">{p.domain || '-'}</td>
-                  <td className="py-3">
-                    <button
-                      onClick={async () => {
-                        if (confirm(`Delete project ${p.name}?`)) {
-                          await api.adminDeleteProject(p.id);
-                          load();
-                        }
-                      }}
-                      className="text-sm text-red-400 hover:text-red-300"
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    </div>
-  );
+ const [projects,setProjects]=useState<Project[]>([]); const [filter,setFilter]=useState('all'); const [query,setQuery]=useState(''); const [selected,setSelected]=useState<DemoProject|null>(null); const [decision,setDecision]=useState<'approve'|'corrections'|null>(null); const [text,setText]=useState(''); const [error,setError]=useState(''); const [notice,setNotice]=useState(''); const dialog=useRef<HTMLDialogElement>(null);
+ const load=()=>api.adminListProjects().then(setProjects).catch(()=>setError('No se pudieron cargar los proyectos.'));
+ useEffect(()=>{load();},[]);
+ useEffect(()=>{if(selected)dialog.current?.showModal();else dialog.current?.close();},[selected]);
+ const pending=projects.filter(p=>p.status==='pending'); const visible=projects.filter(p=>(filter==='all'||p.status===filter)&&(p.name+' '+p.repo_url).toLowerCase().includes(query.toLowerCase()));
+ function close(){setSelected(null);setDecision(null);setText('');setError('');}
+ return <div className="space-y-6"><header><h1 className="text-3xl font-semibold">Proyectos</h1><p className="mt-2 text-sm text-atlas-muted">Solicitudes pendientes y proyectos registrados en la plataforma.</p></header>{notice&&<p role="status" className="rounded-lg bg-atlas-mist p-3 text-sm">{notice}</p>}{error&&!selected&&<p role="alert">{error}</p>}
+ <section><h2 className="mb-4 text-xl font-semibold">Pendientes de revisión <span className="text-atlas-muted">({pending.length})</span></h2><div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">{pending.map(p=><button key={p.id} className="rounded-xl border border-atlas-mist p-5 text-left hover:border-atlas-red" onClick={()=>{setSelected(p as DemoProject);setText('');setDecision(null);setError('');}}><h3 className="font-semibold">{p.name}</h3><p className="mt-2 text-sm text-atlas-muted">{(p as DemoProject).owner}</p><p className="mt-1 break-all text-xs text-atlas-muted">{p.repo_url}</p><span className="mt-4 block text-sm font-medium text-atlas-red">Ver solicitud →</span></button>)}</div>{!pending.length&&<p className="text-sm text-atlas-muted">No hay solicitudes pendientes.</p>}</section>
+ <section><h2 className="mb-4 text-xl font-semibold">Todos los proyectos</h2><label className="block text-sm">Buscar proyecto<input className="ml-3 rounded-lg border border-atlas-mist p-2" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Nombre o repositorio"/></label><div className="my-4 flex flex-wrap gap-2">{[['all','Todos'],['running','Desplegados'],['building','CI en ejecución'],['ci_pending','CI pendiente'],['pending','Validación pendiente'],['corrections','Por corregir'],['failed','Despliegue fallido'],['ci_failed','CI fallido'],['retained','Retenidos']].map(([value,label])=><button key={value} aria-pressed={filter===value} onClick={()=>setFilter(value)} className={`rounded-full px-3 py-2 text-xs ${filter===value?'bg-atlas-red text-white':'bg-atlas-mist'}`}>{label}</button>)}</div><div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">{visible.map(p=><ProjectCard key={p.id} project={p}/>)}</div><p className="mt-4 text-xs text-atlas-muted">Mostrando {visible.length} de {projects.length} proyectos</p></section>
+ <dialog ref={dialog} onCancel={close} className="m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-xl overflow-y-auto rounded-2xl p-6 backdrop:bg-black/50" aria-labelledby="review-title">{selected&&<><h2 id="review-title" className="text-xl font-semibold">{decision==='approve'?'Confirmar validación':decision==='corrections'?'Solicitar correcciones':'Detalle de la solicitud'}</h2><h3 className="mt-4 font-semibold">{selected.name}</h3><dl className="my-4 divide-y divide-atlas-mist text-sm">{Object.entries({Responsable:selected.owner,Repositorio:selected.submission?.repo||selected.repo_url,Rama:selected.branch,'Commit presentado':selected.submission?.commit||'No disponible',Tipo:selected.submission?.type||'No disponible',Asignatura:selected.submission?.academic?selected.submission.course:'No aplica','Propósito funcional':selected.submission?.purpose||'No disponible'}).map(([label,value])=><div key={label} className="py-3"><dt className="text-xs text-atlas-muted">{label}</dt><dd className="mt-1 break-all">{value}</dd></div>)}</dl>{!decision?<div className="flex flex-wrap justify-end gap-3"><button onClick={close}>Cerrar</button><Link to={`/projects/${selected.id}`} className="text-atlas-red">Ver proyecto</Link><button disabled={!getDemoUser()} onClick={()=>setDecision('corrections')} className="rounded-lg border p-2">Solicitar correcciones</button><button disabled={!getDemoUser()} onClick={()=>setDecision('approve')} className="rounded-lg bg-atlas-red p-2 text-white">Validar</button></div>:<form onSubmit={e=>{e.preventDefault();try{reviewDemoProject(selected.id,decision,text);setNotice(decision==='approve'?'Proyecto validado. CI pendiente.':'Correcciones solicitadas al desarrollador.');close();load();}catch(cause){setError((cause as Error).message);}}}><label className="block text-sm">{decision==='approve'?`Escribe exactamente ${selected.submission.repo}`:'Explicación obligatoria'}<textarea required value={text} onChange={e=>setText(e.target.value)} className="mt-2 w-full rounded border border-atlas-mist p-3" rows={decision==='approve'?1:4}/></label>{error&&<p role="alert" className="my-3 text-sm text-atlas-red">{error}</p>}<div className="mt-4 flex justify-end gap-3"><button type="button" onClick={()=>{setDecision(null);setText('');setError('');}}>Atrás</button><button className="rounded-lg bg-atlas-red p-3 text-sm text-white">{decision==='approve'?'Validar proyecto':'Enviar solicitud'}</button></div></form>}</>}</dialog>
+ </div>;
 }

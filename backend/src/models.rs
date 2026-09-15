@@ -16,6 +16,14 @@ pub struct User {
     pub updated_at: DateTime<Utc>,
 }
 
+#[derive(Debug, FromRow)]
+pub struct GitHubAccount {
+    pub user_id: Uuid,
+    pub github_user_id: i64,
+    pub github_login: String,
+    pub access_token: String,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct RegisterRequest {
     pub email: String,

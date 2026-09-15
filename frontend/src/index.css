@@ -1,3 +1,43 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  body { @apply m-0 bg-atlas-mist text-atlas-ink antialiased; }
+  button, input, a { -webkit-tap-highlight-color: transparent; }
+  button { @apply transition-colors; }
+  button:disabled { cursor: wait; }
+  :focus-visible { outline: 3px solid #A00000; outline-offset: 4px; }
+  input { @apply border border-atlas-mist; }
+  h1, h2, h3 { text-wrap: balance; }
+  ::selection { background: #A00000; color: white; }
+}
+@layer components {
+  .app-shell { @apply min-h-screen bg-white p-3 md:grid; grid-template-columns: 264px minmax(0, 1fr); }
+  .app-sidebar { @apply relative flex flex-col gap-2 rounded-2xl bg-atlas-mist p-5 md:sticky md:top-3; height: calc(100dvh - 24px); }
+  .sidebar-link { @apply flex items-center justify-between rounded-lg px-4 py-3 text-sm font-medium text-atlas-muted hover:bg-white/60; }
+  .sidebar-link.selected { @apply bg-atlas-red text-white; }
+  .auth-shell { @apply min-h-screen bg-white lg:grid; grid-template-columns: 1.1fr 1fr; }
+  .auth-story { @apply relative flex flex-col justify-between overflow-hidden bg-atlas-red p-8 text-white sm:p-14 lg:min-h-screen; }
+  .atlas-orbit { position: absolute; width: 540px; height: 540px; border: 1px solid #ffffff30; border-radius: 50%; right: -220px; bottom: -250px; box-shadow: 0 0 0 65px #ffffff09, 0 0 0 130px #ffffff06; }
+  .skip-link { @apply fixed left-4 top-4 z-50 -translate-y-24 rounded bg-white p-3 text-atlas-red focus:translate-y-0; }
+}
+@media (max-width: 767px) {
+  .app-sidebar { padding: 1.25rem; height: auto; }
+  .app-sidebar nav { margin-top: 1rem; flex-direction: row; flex-wrap: wrap; }
+  .app-sidebar > div:last-child { margin-top: 1rem; padding-top: 1rem; }
+  main .flex.items-center.justify-between { flex-wrap: wrap; gap: 1rem; }
+  main .grid-cols-3 { grid-template-columns: 1fr; }
+  main .bg-white:has(> table) { overflow-x: auto; }
+  table { min-width: 600px; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; } }
+
+@layer components {
+  .sidebar-account { @apply relative mt-auto border-t border-black/10 pt-4; }
+  .account-panel { @apply absolute bottom-full left-0 z-50 mb-3 w-full rounded-xl border border-atlas-mist bg-white p-4 shadow-lg; max-height: 60dvh; overflow-y: auto; }
+}
+progress { appearance: none; border: 0; border-radius: 999px; overflow: hidden; background: #EBEBEB; }
+progress::-webkit-progress-bar { background: #EBEBEB; border-radius: 999px; }
+progress::-webkit-progress-value { background: #A00000; border-radius: 999px; }
+progress::-moz-progress-bar { background: #A00000; border-radius: 999px; }

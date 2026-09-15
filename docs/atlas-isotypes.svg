@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="580" viewBox="0 0 1200 580">
+<rect width="1200" height="580" fill="#EBEBEB"/>
+<g font-family="Segoe UI,Arial,sans-serif" fill="#1D1D1B">
+<text x="48" y="62" font-size="32" font-weight="600">Atlas / Direcciones de isotipo</text><text x="48" y="92" font-size="16" fill="#62625E">Universidad del Norte · Propuestas para una plataforma que sostiene proyectos</text>
+<rect x="40" y="132" width="360" height="342" rx="14" fill="white"/><rect x="420" y="132" width="360" height="342" rx="14" fill="white"/><rect x="800" y="132" width="360" height="342" rx="14" fill="white"/>
+<g transform="translate(158 178) scale(2.6)"><circle cx="24" cy="10" r="8" fill="#FF3010"/><path d="M6 46 19 22h10l13 24H31l-7-14-7 14H6Z" fill="#A00000"/><path d="M13 19q11 9 22 0" fill="none" stroke="#A00000" stroke-width="4" stroke-linecap="round"/></g>
+<g transform="translate(600 253)" fill="none" stroke="#A00000" stroke-width="9"><circle r="42"/><ellipse rx="68" ry="19" transform="rotate(-25)" stroke="#FF3010" stroke-width="6"/><path d="M-42 68h84M-25 66l12-25m38 25L13 41"/></g>
+<g transform="translate(980 251)"><circle cy="-42" r="17" fill="#FF3010"/><path d="M-60 64V-4h32v68zm88 0V-4h32v68zM-23-15h46v31h-46z" fill="#A00000"/></g>
+<text x="66" y="373" font-size="22" font-weight="600">01 · A que sostiene</text><text x="66" y="405" font-size="16" fill="#62625E">Inicial, titán y proyecto en una figura.</text><text x="66" y="439" font-size="13" fill="#A00000">PROPUESTA APLICADA</text>
+<text x="446" y="373" font-size="22" font-weight="600">02 · Órbita y pedestal</text><text x="446" y="405" font-size="16" fill="#62625E">Continuidad, despliegue y soporte.</text>
+<text x="826" y="373" font-size="22" font-weight="600">03 · Bóveda modular</text><text x="826" y="405" font-size="16" fill="#62625E">Una infraestructura compartida.</text>
+<g transform="translate(48 514)"><rect width="32" height="24" rx="4" fill="#1D1D1B"/><rect x="42" width="32" height="24" rx="4" fill="#A00000"/><rect x="84" width="32" height="24" rx="4" fill="#FF3010"/><rect x="126" width="32" height="24" rx="4" fill="#fff"/><text x="180" y="18" font-size="15">Tus ideas. Nuestro soporte.</text></g>
+</g></svg>

@@ -1,9 +1,12 @@
+import DemoProjectDetailPage from './DemoProjectDetailPage';
+import { getDemoUser } from '../demoSession';
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api, type Project, type Build } from '../api';
 import StatusBadge from '../components/StatusBadge';
 
-export default function ProjectDetailPage() {
+export default function ProjectDetailPage() { return getDemoUser() ? <DemoProjectDetailPage /> : <RealProjectDetailPage />; }
+function RealProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [project, setProject] = useState<Project | null>(null);
@@ -32,65 +35,63 @@ export default function ProjectDetailPage() {
   useEffect(() => { load(); }, [load]);
 
   const handleDelete = async () => {
-    if (!id || !confirm('Are you sure you want to delete this project?')) return;
+    if (!id || !confirm('¿Seguro que quieres eliminar este proyecto?')) return;
     await api.deleteProject(id);
     navigate('/');
   };
 
-  if (loading) return <p className="text-gray-400">Loading...</p>;
-  if (!project) return <p className="text-gray-400">Project not found</p>;
+  if (loading) return <p className="text-atlas-muted">Cargando...</p>;
+  if (!project) return <p className="text-atlas-muted">Proyecto no encontrado</p>;
 
   return (
     <div className="max-w-3xl">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold">{project.name}</h1>
-          <p className="text-sm text-gray-400 mt-1">{project.repo_url} ({project.branch})</p>
+          <p className="text-sm text-atlas-muted mt-1">{project.repo_url} ({project.branch})</p>
         </div>
         <div className="flex items-center gap-3">
           <StatusBadge status={project.status} />
-          <button onClick={handleDelete} className="text-sm text-red-400 hover:text-red-300">
-            Delete
-          </button>
+          <button onClick={handleDelete} className="text-sm text-atlas-red hover:text-atlas-red">Eliminar</button>
         </div>
       </div>
 
       {project.domain && (
-        <div className="bg-gray-800 rounded-lg p-4 mb-6">
-          <p className="text-sm text-gray-400">Deployed at:</p>
+        <div className="bg-white rounded-lg p-4 mb-6">
+          <p className="text-sm text-atlas-muted">Disponible en:</p>
           <a href={`https://${project.domain}`} target="_blank" rel="noreferrer"
-             className="text-cyan-400 hover:underline">
+             className="text-atlas-red hover:underline">
             {project.domain}
           </a>
         </div>
       )}
 
       {webhook && (
-        <div className="bg-gray-800 rounded-lg p-4 mb-6">
-          <h3 className="font-semibold mb-2">Webhook Configuration</h3>
-          <p className="text-sm text-gray-400">URL:</p>
-          <code className="block bg-gray-700 rounded px-3 py-2 mt-1 text-sm break-all">{webhook.webhook_url}</code>
-          <p className="text-sm text-gray-400 mt-3">Secret:</p>
-          <code className="block bg-gray-700 rounded px-3 py-2 mt-1 text-sm">{webhook.webhook_secret}</code>
+        <div className="bg-white rounded-lg p-4 mb-6">
+          <h3 className="font-semibold mb-2">Configuración del webhook</h3>
+          <p className="text-sm text-atlas-muted">URL:</p>
+          <code className="block bg-atlas-mist rounded px-3 py-2 mt-1 text-sm break-all">{webhook.webhook_url}</code>
+          <p className="text-sm text-atlas-muted mt-3">Secreto:</p>
+          <code className="block bg-atlas-mist rounded px-3 py-2 mt-1 text-sm">{webhook.webhook_secret}</code>
         </div>
       )}
 
-      <div className="bg-gray-800 rounded-lg p-4">
+      <div className="bg-white rounded-lg p-4">
         <h3 className="font-semibold mb-4">Builds</h3>
         {builds.length === 0 ? (
-          <p className="text-gray-500 text-sm">No builds yet. Push to your repository to trigger a build.</p>
+          <p className="text-atlas-muted text-sm">Todavía no hay ejecuciones. Envía cambios al repositorio para iniciar una.</p>
         ) : (
           <div className="space-y-3">
             {builds.map(b => (
-              <div key={b.id} className="bg-gray-700 rounded p-3">
+              <div key={b.id} className="bg-atlas-mist rounded p-3">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm text-gray-300">
-                    {b.commit_message || b.commit_sha?.slice(0, 7) || 'Unknown'}
+                  <span className="text-sm text-atlas-muted">
+                    {b.commit_message || b.commit_sha?.slice(0, 7) || 'Desconocido'}
                   </span>
                   <StatusBadge status={b.status} />
                 </div>
                 {b.logs && (
-                  <pre className="text-xs text-gray-400 mt-2 max-h-32 overflow-y-auto">{b.logs}</pre>
+                  <pre className="text-xs text-atlas-muted mt-2 max-h-32 overflow-y-auto">{b.logs}</pre>
                 )}
               </div>
             ))}

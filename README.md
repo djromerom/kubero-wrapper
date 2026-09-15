@@ -1,42 +1,52 @@
-# Kubero Wrapper
+# Atlas
 
-Multi-tenant PaaS wrapper for [Kubero](https://www.kubero.dev). Event-driven backend in Rust + React dashboard for students.
+Plataforma de proyectos de la Universidad del Norte, construida sobre Kubero.
 
-## Architecture
+## Estructura
 
-```
-Student Browser → React Dashboard → Rust API (Axum) → Redis (Event Bus)
-                                                          ↓
-                                               ┌──────────┼──────────┐
-                                               ↓          ↓          ↓
-                                         Projects    Kubero      Notify
-                                         Manager     Manager
-                                               ↓          ↓
-                                          PostgreSQL  Kubero CRDs
-```
+- `frontend/`: aplicación React + TypeScript + Vite + Tailwind CSS.
+- `backend/`: API Rust (Axum), PostgreSQL y Redis.
+- `docs/`: requisitos, decisiones, arquitectura e identidad visual.
+- `prototype/`: referencia HTML de los flujos diseñados antes de integrar el remoto.
 
-## Stack
+## Desarrollo
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend | React + Vite |
-| Backend | Rust (Axum + tokio) |
-| Event Bus | Redis (Pub/Sub) |
-| Database | PostgreSQL (via Longhorn) |
-| Runtime | ARM64 (Orange Pi 5 Plus) |
-
-## Quick Start
-
-```bash
-# Backend
-cargo run
-
-# Frontend
-cd frontend && npm run dev
+```sh
+cd frontend
+npm ci
+npm run dev
 ```
 
-## Documentation
+Vite publica el frontend en http://localhost:5173 y redirige `/api` y `/ws` al backend en el puerto 3000.
 
-- [Requirements](docs/requirements/)
-- [Architecture](docs/architecture/)
-- [API](docs/api/)
+Para iniciar el backend, configura las variables de `backend/.env.example` y ejecuta `cargo run` desde `backend/`.
+
+Si no tienes Rust instalado, puedes iniciar las dependencias y la API con Docker desde la raíz:
+
+```powershell
+Copy-Item .env.example .env
+docker compose up --build postgres redis backend
+```
+
+Después utiliza **Usar backend local** en la pantalla de acceso. Puedes crear la primera cuenta desde el enlace **Crear cuenta local**.
+
+### Integración con GitHub
+
+Cada cuenta comienza sin GitHub vinculado. Al registrar un proyecto, el usuario debe autorizar la GitHub App antes de poder seleccionar uno de sus repositorios, una rama y el último commit disponible. El backend vuelve a validar el acceso antes de crear el proyecto.
+
+Si ejecutas `cargo run`, configura en `backend/.env` los valores `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_CALLBACK_URL` y `FRONTEND_URL`. Si utilizas Docker Compose, copia `.env.example` a `.env` en la raíz y completa allí las credenciales.
+
+En la configuración de la GitHub App activa **Request user authorization (OAuth) during installation** y registra `http://localhost:3000/api/github/callback` como Callback URL. La App solo necesita permisos de lectura sobre metadatos y contenidos; no configures una Setup URL para este flujo.
+
+En desarrollo, `KUBERNETES_REQUIRED=false` permite iniciar la API y probar GitHub sin disponer todavía del clúster. Configúralo como `true` en los entornos donde las operaciones de infraestructura deban ser obligatorias.
+
+Cuando se utiliza únicamente el frontend, el botón `Vincular GitHub (demo)` reproduce el estado inicial sin vinculación y habilita los repositorios de demostración sin comunicarse con GitHub.
+
+## Documentación
+
+- [Índice y estado de implementación](docs/README.md)
+- [Decisiones del proyecto](docs/decisions.md)
+- [Identidad de Atlas](docs/atlas-identity.md)
+- [Flujo del proyecto](docs/project-flow.md)
+
+El código importado del remoto es una base de implementación; todavía no cubre todos los requisitos definidos durante el prototipo.

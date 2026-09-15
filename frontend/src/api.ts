@@ -1,3 +1,6 @@
+import { clusterDemo } from './demoFixtures';
+import { listDemoProjects } from './demoProjects';
+import { getDemoUser } from './demoSession';
 const API_BASE = '/api';
 
 function getToken(): string | null {
@@ -5,6 +8,17 @@ function getToken(): string | null {
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  if (getDemoUser()) {
+    if(path === '/admin/cluster' && getDemoUser()?.role === 'admin') return clusterDemo as T;
+    if (!options.method && (path === '/projects' || path === '/admin/projects')) return listDemoProjects(path === '/admin/projects') as T;
+    if (!options.method && path.startsWith('/projects/')) {
+      const parts = path.split('/');
+      const project = listDemoProjects(true).find(item => item.id === parts[2]);
+      if (project && parts.length === 3) return project as T;
+      if (project && parts[3] === 'builds') return (project.builds || []) as T;
+    }
+    throw new Error('Esta operación requiere la conexión real. Estás en modo de demostración.');
+  }
   const token = getToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -64,6 +78,25 @@ export interface ClusterStatus {
   memory_usage: number;
 }
 
+export interface GithubRepository {
+  id: number;
+  name: string;
+  full_name: string;
+  html_url: string;
+  clone_url?: string;
+}
+
+export interface GithubBranch { name: string }
+export interface GithubStatus { linked: boolean; login?: string; github_user_id?: number }
+export interface GithubRepositoriesResponse { repositories: GithubRepository[] }
+export interface GithubBranchesResponse { owner: string; repository: string; branches: GithubBranch[] }
+export interface GithubLatestCommitResponse {
+  owner: string;
+  repository: string;
+  branch: string;
+  commit: { sha: string; commit: { message: string } };
+}
+
 export const api = {
   health: () => request<{ status: string }>('/health'),
 
@@ -88,6 +121,22 @@ export const api = {
 
   getWebhook: (id: string) =>
     request<{ webhook_url: string; webhook_secret: string }>(`/projects/${id}/webhook`),
+
+  githubStatus: () => request<GithubStatus>('/github/status'),
+
+  githubConnect: async () => {
+    const { authorization_url } = await request<{ authorization_url: string }>('/github/connect');
+    window.location.assign(authorization_url);
+  },
+
+  listGithubRepositories: () =>
+    request<GithubRepositoriesResponse>('/github/repositories'),
+
+  listGithubBranches: (owner: string, repo: string) =>
+    request<GithubBranchesResponse>(`/github/repositories/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/branches`),
+
+  getLatestGithubCommit: (owner: string, repo: string, branch: string) =>
+    request<GithubLatestCommitResponse>(`/github/repositories/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/latest-commit?branch=${encodeURIComponent(branch)}`),
 
   adminListProjects: () => request<Project[]>('/admin/projects'),
 

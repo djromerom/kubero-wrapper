@@ -1,0 +1,325 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Atlas — Panel del desarrollador</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="vendor/tabler/tabler-icons-filled.min.css">
+<link rel="stylesheet" href="vendor/tabler/tabler-icons.min.css">
+<link rel="stylesheet" href="styles.css">
+<script src="scripts.js" defer></script>
+</head>
+<body data-page="developer" data-role="student">
+
+<section class="screen" id="dashboard">
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand"><i class="ti ti-globe-filled brand-mark" aria-hidden="true"></i><span class="brand-name">Atlas</span></div>
+      <div class="nav-item active" onclick="go('dashboard')"><span class="dot"></span>Mis proyectos</div>
+      <div class="nav-item admin-only" onclick="window.location.href='admin.html'">Panel admin</div>
+      <div class="sidebar-foot"><div class="who">Sarik Bonadiez</div></div>
+    </aside>
+    <main class="main">
+      <div class="page-head">
+        <div>
+          <h1>Mis proyectos</h1>
+          <p>Gestiona y despliega tus aplicaciones.</p>
+        </div>
+        <div class="project-head-actions">
+          <a class="how-deploy-link" href="docs/como-desplegar.html">Cómo desplegar</a>
+          <button class="btn btn-primary new-btn" style="width:auto;" onclick="openModal()">+ Nuevo proyecto</button>
+        </div>
+      </div>
+
+      <section class="pending-approvals developer-corrections" aria-labelledby="developerCorrectionsTitle">
+        <div class="section-heading"><h2 id="developerCorrectionsTitle">Proyectos por corregir</h2><p>Revisa las observaciones y presenta una nueva versión para validación.</p></div>
+        <div class="approval-grid">
+          <div class="approval-item correction-item" role="button" tabindex="0" data-project="Portal de tutorías" data-repo="sarikr/portal-tutorias" data-observation="Explica con mayor precisión qué necesidad académica resuelve y presenta un commit que incluya el flujo funcional de reserva." onclick="openDeveloperCorrection(this)">
+            <h3>Portal de tutorías</h3><div class="who">Correcciones pendientes</div><div class="repo">github.com/sarikr/portal-tutorias</div><span class="approval-open">Corregir proyecto <i class="ti ti-arrow-right"></i></span>
+          </div>
+        </div>
+      </section>
+
+      <div class="stat-strip">
+        <div class="stat-card"><div class="num">5</div><div class="lbl">Proyectos</div></div>
+        <div class="stat-card accent-running"><div class="num">1</div><div class="lbl">Desplegado</div></div>
+        <div class="stat-card accent-building"><div class="num">1</div><div class="lbl">CI en ejecución</div></div>
+        <div class="stat-card accent-pending"><div class="num">1</div><div class="lbl">Validación pendiente</div></div>
+        <div class="stat-card accent-error"><div class="num">1</div><div class="lbl">Despliegue fallido</div></div>
+      </div>
+
+      <div class="project-catalog developer-project-catalog">
+        <article class="project-card project-deployed"><div class="project-card-head action-menu-wrap"><h3 class="proj-name" onclick="go('detail')">Recomendador de libros</h3><button type="button" class="row-action-btn" aria-label="Acciones de Recomendador de libros" onclick="toggleActionMenu(this)">⋮</button><span class="action-menu"><button onclick="go('detail')">Ver proyecto</button><button onclick="actionBuilds()">Ver builds</button><button onclick="actionLogs()">Ver logs</button><button onclick="actionUrl()">Ver URL</button><button onclick="actionRetryBuild()">Reintentar build</button><button class="danger" onclick="actionDeleteProject()">Eliminar proyecto</button></span></div><div class="project-owner project-repo">github.com/sarikr/recomendador-libros</div><span class="badge badge-running"><span class="dot"></span>Desplegado</span><div class="project-build"><span>Última ejecución</span><strong>Hace 2 días</strong><small>#42</small></div><div class="project-url">recomendador-libros.estudiantes.uninorte.local</div></article>
+        <article class="project-card project-building"><div class="project-card-head action-menu-wrap"><h3 class="proj-name">API de reservas de laboratorio</h3><button type="button" class="row-action-btn" aria-label="Acciones de API de reservas" onclick="toggleActionMenu(this)">⋮</button><span class="action-menu"><button onclick="actionViewProject()">Ver proyecto</button><button onclick="actionBuilds()">Ver builds</button><button onclick="actionLogs()">Ver logs</button><button onclick="actionUrl()">Ver URL</button><button onclick="actionRetryBuild()">Reintentar build</button><button class="danger" onclick="actionDeleteProject()">Eliminar proyecto</button></span></div><div class="project-owner project-repo">github.com/sarikr/lab-reservas-api</div><span class="badge badge-building"><span class="dot"></span>CI en ejecución</span><div class="project-build"><span>Última ejecución</span><strong>Hace 3 min</strong><small>#15</small></div><div class="project-url">lab-reservas-api.estudiantes.uninorte.local</div></article>
+        <article class="project-card project-pending"><div class="project-card-head action-menu-wrap"><h3 class="proj-name">Portafolio personal</h3><button type="button" class="row-action-btn" aria-label="Acciones de Portafolio personal" onclick="toggleActionMenu(this)">⋮</button><span class="action-menu"><button onclick="actionViewProject()">Ver proyecto</button><button onclick="actionBuilds()">Ver builds</button><button onclick="actionLogs()">Ver logs</button><button onclick="actionUrl()">Ver URL</button><button onclick="actionRetryBuild()">Reintentar build</button><button class="danger" onclick="actionDeleteProject()">Eliminar proyecto</button></span></div><div class="project-owner project-repo">github.com/sarikr/portafolio-web</div><span class="badge badge-pending"><span class="dot"></span>Validación pendiente</span><div class="project-build"><span>Solicitud enviada</span><strong>Hace 1 hora</strong></div><div class="project-url unavailable">URL aún sin asignar</div></article>
+        <article class="project-card project-error"><div class="project-card-head action-menu-wrap"><h3 class="proj-name">Tracker de finanzas</h3><button type="button" class="row-action-btn" aria-label="Acciones de Tracker de finanzas" onclick="toggleActionMenu(this)">⋮</button><span class="action-menu"><button onclick="actionViewProject()">Ver proyecto</button><button onclick="actionBuilds()">Ver builds</button><button onclick="actionLogs()">Ver logs</button><button onclick="actionUrl()">Ver URL</button><button onclick="actionRetryBuild()">Reintentar build</button><button class="danger" onclick="actionDeleteProject()">Eliminar proyecto</button></span></div><div class="project-owner project-repo">github.com/sarikr/finanzas-tracker</div><span class="badge badge-error"><span class="dot"></span>Despliegue fallido</span><div class="project-build"><span>Última ejecución</span><strong>Hace 5 horas</strong><small>#8</small></div><div class="project-url unavailable">URL no disponible</div></article>
+        <article class="project-card project-retained" onclick="openRetainedProject()"><div class="project-card-head"><h3 class="proj-name">Archivo académico</h3></div><div class="project-owner project-repo">github.com/sarikr/archivo-academico</div><span class="badge badge-building"><span class="dot"></span>Retenido</span><div class="project-build"><span>Eliminación definitiva</span><strong>18 de septiembre de 2026</strong><small>Datos disponibles para exportar o recuperar</small></div><div class="project-url unavailable">Aplicación detenida</div></article>
+      </div>
+      <div class="catalog-foot"><span id="studentProjectCount">Mostrando 1 a 5 de 5 proyectos</span></div>
+    </main>
+  </div>
+<div id="emptyProjects" class="empty-state" style="display:none;margin-top:18px;">
+  <div style="font-size:30px;">📦</div>
+  <h3>Aún no tienes proyectos</h3>
+  <p>Crea tu primer proyecto para solicitar un despliegue.</p>
+  <button class="btn btn-primary" type="button" onclick="openModal()">Crear proyecto</button>
+</div></section>
+
+<!-- Modal: wizard nuevo proyecto -->
+<div class="modal-overlay" id="modal">
+  <div class="modal" style="max-width:620px;">
+    <div class="modal-head">
+      <h2>Nuevo proyecto</h2>
+      <p class="sub">Registra tu aplicación y envíala a revisión antes del despliegue.</p>
+    </div>
+
+    <div class="wizard-steps" id="wizardSteps">
+      <div class="wz-step"><div class="wz-circle current" data-step="1">1</div><span class="wz-label current">Información</span></div>
+      <div class="wz-line"></div>
+      <div class="wz-step"><div class="wz-circle" data-step="2">2</div><span class="wz-label">Despliegue</span></div>
+      <div class="wz-line"></div>
+      <div class="wz-step"><div class="wz-circle" data-step="3">3</div><span class="wz-label">Confirmar</span></div>
+    </div>
+
+    <div class="modal-body">
+      <!-- STEP 1 -->
+      <div class="wizard-panel active" data-wizard-panel="1">
+        <div class="wizard-help"><strong>Primero cuéntanos qué vas a desplegar.</strong><br>La información básica permite organizar el proyecto y asociarlo con su contexto académico.</div>
+        <div class="field">
+          <label>Nombre del proyecto</label>
+          <input id="wizName" type="text" placeholder="recomendador-libros">
+          <div class="hint">Solo minúsculas, números y guiones.</div>
+        </div>
+        <div class="github-connected"><i class="ti ti-brand-github" aria-hidden="true"></i><span><strong>GitHub vinculado</strong><small>Cuenta: sarikr</small></span><span class="badge badge-running"><span class="dot"></span>Conectado</span></div>
+        <div class="field"><label>Repositorio de GitHub</label><select id="wizRepo" onchange="updateRepoBranches()"><option value="">Selecciona un repositorio</option><option value="sarikr/recomendador-libros">sarikr/recomendador-libros</option><option value="sarikr/lab-reservas-api">sarikr/lab-reservas-api</option><option value="sarikr/portafolio-web">sarikr/portafolio-web</option><option value="sarikr/finanzas-tracker">sarikr/finanzas-tracker</option></select></div>
+        <div class="field"><label>Rama</label><select id="wizBranch" disabled onchange="updateCommitOptions()"><option value="">Selecciona primero un repositorio</option></select></div>
+        <div class="field"><label>Commit presentado</label><select id="wizCommit" disabled><option value="">Selecciona primero un repositorio y una rama</option></select><div class="hint">Los commits se obtienen del repositorio. El último disponible queda seleccionado de forma predeterminada.</div></div>
+        <div class="field"><label>Propósito funcional</label><textarea id="wizDescription" rows="3" placeholder="Explica qué hace la aplicación y para qué se utilizará."></textarea><div class="hint">Esta información será revisada durante la admisión del proyecto.</div></div>
+        <label class="switch-row" for="wizAcademic">
+          <span><strong>¿Pertenece a una clase?</strong><small>Actívalo si el proyecto fue realizado para una asignatura.</small></span>
+          <input id="wizAcademic" type="checkbox" onchange="toggleClassField()"><span class="switch-control" aria-hidden="true"></span>
+        </label>
+        <div class="field conditional-field" id="wizClassField" hidden>
+          <label>Clase / curso asociado</label>
+          <select id="wizClass">
+            <option value="">Selecciona una asignatura</option>
+            <option>Diseño Web II</option>
+            <option>Ingeniería de Software</option>
+            <option>Bases de Datos</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- STEP 2 -->
+      <div class="wizard-panel" data-wizard-panel="2">
+        <div class="wizard-help"><strong>Define una configuración inicial de despliegue.</strong><br>Indica cómo debe ejecutarse y exponerse la aplicación dentro del clúster.</div>
+        <div class="field">
+          <label>Tipo de proyecto</label>
+          <div class="choice-grid">
+            <div class="choice selected" id="typeWeb" onclick="selectType('Web')">
+              <strong>Aplicación web</strong><span>Servicio HTTP accesible mediante una URL.</span>
+            </div>
+            <div class="choice" id="typeApi" onclick="selectType('API')">
+              <strong>API / backend</strong><span>Servicio orientado a endpoints y consumo desde otros clientes.</span>
+            </div>
+          </div>
+        </div>
+        <div class="field"><label>Puerto de la aplicación</label><input id="wizPort" type="number" value="3000"><div class="hint">Puerto interno en el que la aplicación escucha dentro de su contenedor; no es el puerto público de la URL.</div></div>
+        <div class="field">
+          <label>Configuración de build</label>
+          <select id="wizBuild">
+            <option>Detectar automáticamente</option>
+            <option>Dockerfile</option>
+            <option>Configuración personalizada</option>
+          </select>
+          <div class="hint">El backend podrá traducir esta configuración a la estrategia de despliegue correspondiente.</div>
+        </div>
+      </div>
+
+      <!-- STEP 3 -->
+      <div class="wizard-panel" data-wizard-panel="3">
+        <div class="wizard-help"><strong>Revisa antes de enviar.</strong><br>El proyecto quedará pendiente de aprobación. Una vez aprobado podrá iniciar su proceso de build y despliegue.</div>
+        <div class="review-box">
+          <h4>Proyecto</h4>
+          <div class="review-row"><span class="k">Nombre</span><span class="v" id="reviewName">—</span></div>
+          <div class="review-row"><span class="k">Descripción</span><span class="v" id="reviewDescription">—</span></div>
+          <div class="review-row"><span class="k">Clase</span><span class="v" id="reviewClass">—</span></div>
+        </div>
+        <div class="review-box">
+          <h4>Repositorio</h4>
+          <div class="review-row"><span class="k">Proveedor</span><span class="v" id="reviewProvider">GitHub vinculado</span></div>
+          <div class="review-row"><span class="k">Repositorio</span><span class="v" id="reviewRepo">—</span></div>
+          <div class="review-row"><span class="k">Rama</span><span class="v" id="reviewBranch">main</span></div>
+          <div class="review-row"><span class="k">Commit</span><span class="v" id="reviewCommit">—</span></div>
+        </div>
+        <div class="review-box">
+          <h4>Despliegue</h4>
+          <div class="review-row"><span class="k">Tipo</span><span class="v" id="reviewType">Aplicación web</span></div>
+          <div class="review-row"><span class="k">Puerto</span><span class="v" id="reviewPort">3000</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-foot">
+      <button class="btn btn-secondary" id="wizardBack" onclick="wizardPrev()">Cancelar</button>
+      <button class="btn btn-primary" id="wizardNext" onclick="wizardNext()">Siguiente</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="developerCorrectionModal" role="dialog" aria-modal="true" aria-labelledby="developerCorrectionTitle">
+  <div class="modal approval-detail-modal">
+    <div class="modal-head"><span class="badge badge-building"><span class="dot"></span>Correcciones pendientes</span><h2 id="developerCorrectionTitle">Corregir proyecto</h2><p class="sub">La solicitud anterior se conservará en el historial.</p></div>
+    <div class="modal-body">
+      <div class="correction-observation"><span>Observaciones del administrador</span><p id="developerCorrectionObservation">—</p></div>
+      <div class="field"><label>Propósito funcional corregido</label><textarea id="developerCorrectionPurpose" rows="4">Plataforma funcional para que estudiantes consulten tutores disponibles y reserven una sesión académica.</textarea></div>
+      <div class="field"><label>Nuevo commit presentado</label><select id="developerCorrectionCommit"><option value="b41a2d7e01ff74a8f675ca71c95ea24d8a6cc983">Último · Implementa reserva de tutorías · b41a2d7</option><option value="93ad621eeaa140597381ee291425543c6149e20f">Mejora navegación inicial · 93ad621</option></select><div class="hint">Commits obtenidos de la rama configurada del repositorio.</div></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-secondary" type="button" onclick="closeDeveloperCorrection()">Cancelar</button><button class="btn btn-primary" type="button" onclick="submitDeveloperCorrection()">Enviar a validación</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="voluntaryDeleteModal" role="dialog" aria-modal="true" aria-labelledby="voluntaryDeleteTitle">
+  <div class="modal destructive-modal">
+    <div class="modal-head"><span class="danger-kicker">Eliminación voluntaria</span><h2 id="voluntaryDeleteTitle">Eliminar proyecto</h2><p class="sub">La aplicación será detenida y comenzará un periodo de retención de 15 días.</p></div>
+    <div class="modal-body">
+      <div class="consequence-list"><strong>Al confirmar:</strong><span>Se bloquearán nuevos trabajos y se cancelarán los pendientes.</span><span>Se retirará el tráfico y se eliminarán recursos efímeros exclusivos.</span><span>Los datos persistentes podrán exportarse o recuperarse durante la retención.</span><span>El repositorio de GitHub y tu cuenta no se eliminarán.</span></div>
+      <fieldset class="reason-options"><legend>Motivo de la eliminación</legend><label><input type="checkbox" name="deleteReason"> Por solicitud administrativa</label><label><input type="checkbox" name="deleteReason"> He decidido migrar a otra plataforma</label><label><input type="checkbox" name="deleteReason"> He decidido no continuar con el proyecto</label><label><input type="checkbox" name="deleteReason"> El proyecto cumplió su propósito</label><label><input type="checkbox" name="deleteReason"> Otro motivo</label></fieldset>
+      <div class="field"><label>Explicación adicional (opcional)</label><textarea id="voluntaryDeleteExplanation" rows="3" placeholder="Puedes aportar más contexto."></textarea></div>
+      <div class="confirmation-warning">Para confirmar, escribe exactamente <strong class="mono" id="voluntaryDeleteExpected">dueño/repositorio</strong>.</div>
+      <div class="field"><label>Nombre del repositorio</label><input id="voluntaryDeleteText" autocomplete="off" placeholder="dueño/repositorio"><div class="hint" id="voluntaryDeleteError"></div></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-secondary" onclick="closeVoluntaryDelete()">Cancelar</button><button class="btn btn-danger" onclick="confirmVoluntaryDelete()">Eliminar e iniciar retención</button></div>
+  </div>
+</div>
+
+<section class="screen" id="detail">
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand"><i class="ti ti-globe-filled brand-mark" aria-hidden="true"></i><span class="brand-name">Atlas</span></div>
+      <div class="nav-item active" onclick="go('dashboard')"><span class="dot"></span>Mis proyectos</div>
+      <div class="nav-item admin-only" onclick="window.location.href='admin.html'">Panel admin</div>
+      <div class="sidebar-foot"><div class="who">Sarik Bonadiez</div></div>
+    </aside>
+    <main class="main">
+      <button class="breadcrumb" type="button" onclick="go('dashboard')"><i class="ti ti-arrow-left" aria-hidden="true"></i>Mis proyectos</button>
+      <div class="detail-head">
+        <div class="title-row">
+          <h1>recomendador-libros</h1>
+          <span class="badge badge-running"><span class="dot"></span>Desplegado</span>
+        </div>
+        <button class="btn btn-danger-outline" onclick="actionDeleteProject()">Eliminar proyecto</button>
+      </div>
+      <div class="detail-sub">recomendador-libros.estudiantes.uninorte.local</div>
+
+      <div class="tabs">
+        <div class="tab active" data-tab="resumen">Resumen</div>
+        <div class="tab" data-tab="builds">Builds</div>
+        <div class="tab" data-tab="logs">Logs</div>
+        <div class="tab" data-tab="config">Configuración</div>
+        <div class="tab" data-tab="retention">Retención</div>
+      </div>
+
+      <div class="tab-panel active" id="tab-resumen">
+        <div class="stepper">
+          <div class="step"><div class="step-circle done">✓</div><span class="step-label done">Aprobado</span></div>
+          <div class="step-line done"></div>
+          <div class="step"><div class="step-circle done">✓</div><span class="step-label done">CI superado</span></div>
+          <div class="step-line done"></div>
+          <div class="step"><div class="step-circle current">●</div><span class="step-label current">Desplegado</span></div>
+        </div>
+        <div class="two-col">
+          <div class="panel">
+            <h3>Información general</h3>
+            <div class="kv-row"><span class="k">Repositorio</span><span class="v">sarikr/recomendador-libros</span></div>
+            <div class="kv-row"><span class="k">Rama</span><span class="v">main</span></div>
+            <div class="kv-row"><span class="k">Responsable</span><span class="v">Sarik Bonadiez</span></div>
+            <div class="kv-row"><span class="k">Admisión</span><span class="v"><span class="badge badge-running"><span class="dot"></span>Aprobado</span></span></div>
+            <div class="kv-row"><span class="k">Commit admitido</span><span class="v mono">43c9a7d…c87e</span></div>
+          </div>
+          <div class="panel">
+            <h3>Versión en servicio</h3>
+            <div class="kv-row"><span class="k">Commit</span><span class="v mono">8f21a4c…b109</span></div>
+            <div class="kv-row"><span class="k">Ejecución</span><span class="v">#42 · Desplegado</span></div>
+            <div class="kv-row"><span class="k">URL</span><a class="link-out" href="#">Abrir aplicación <i class="ti ti-external-link" aria-hidden="true"></i></a></div>
+            <div class="kv-row"><span class="k">Publicación</span><span class="v">URL y TLS listos</span></div>
+            <h3 style="margin-top:20px;">Última candidata</h3>
+            <div class="kv-row"><span class="k">Commit</span><span class="v mono">8f21a4c…b109</span></div>
+            <div class="kv-row"><span class="k">Resultado</span><span class="v">CI superado · Desplegado</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="tab-builds">
+        <div class="panel">
+          <h3>Builds recientes</h3>
+          <table>
+            <tr><th>Ejecución</th><th>Commit</th><th>CI</th><th>Despliegue</th><th>Resultado</th><th></th></tr>
+            <tr><td class="mono">#42</td><td class="mono">8f21a4c</td><td><span class="badge badge-running"><span class="dot"></span>Superado</span></td><td><span class="badge badge-running"><span class="dot"></span>Desplegado</span></td><td>En servicio</td><td class="link-out" style="cursor:pointer;" onclick="openBuildLogs('#42')">Ver diagnóstico</td></tr>
+            <tr><td class="mono">#41</td><td class="mono">e17b590</td><td><span class="badge badge-error"><span class="dot"></span>Fallido</span></td><td>No iniciado</td><td>Sin cambio en servicio</td><td class="link-out" style="cursor:pointer;" onclick="openBuildLogs('#41')">Ver diagnóstico</td></tr>
+            <tr><td class="mono">#40</td><td class="mono">731da20</td><td><span class="badge badge-running"><span class="dot"></span>Superado</span></td><td><span class="badge badge-running"><span class="dot"></span>Desplegado</span></td><td>Versión anterior</td><td class="link-out" style="cursor:pointer;" onclick="openBuildLogs('#40')">Ver diagnóstico</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="tab-logs">
+        <div class="panel">
+          <h3 id="logsTitle">Diagnóstico de la ejecución #42</h3>
+          <p class="panel-note">Commit <span class="mono">8f21a4c…b109</span> · Los secretos y credenciales se ocultan de estos registros.</p>
+          <div class="logs">
+            <div class="l1">[10:32:01] Clonando repositorio…</div>
+            <div class="l1">[10:32:04] Instalando dependencias…</div>
+            <div class="l2">[10:32:41] Construyendo imagen Docker…</div>
+            <div class="l1">[10:32:58] Escaneando vulnerabilidades…</div>
+            <div class="l3">[10:33:02] ✓ Build completado — desplegado correctamente</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="tab-config">
+        <div class="two-col">
+          <div class="panel">
+            <h3>Configuración del proyecto</h3>
+            <div class="field"><label>Nombre visible</label><input id="editName" value="recomendador-libros"></div>
+            <div class="field"><label>Repositorio</label><input value="sarikr/recomendador-libros" disabled><div class="hint">El repositorio no puede cambiarse. Para utilizar otro, registra un proyecto nuevo.</div></div>
+            <div class="field"><label>Rama</label><select id="editBranch"><option>main</option><option>develop</option></select><div class="hint">El cambio solo se aplicará a ejecuciones posteriores.</div></div>
+            <button class="btn btn-primary config-save" type="button" onclick="saveProjectConfig()">Guardar cambios</button>
+          </div>
+          <div class="panel">
+            <h3>Colaboradores</h3>
+            <p class="panel-note">Solo el propietario puede gestionar colaboradores institucionales.</p>
+            <div class="kv-row"><span class="k">Laura Méndez</span><span class="v">Colaboradora</span></div>
+            <div class="kv-row"><span class="k">Carlos Rojas</span><span class="v">Invitación pendiente</span></div>
+            <button class="btn btn-secondary" type="button" onclick="showToast('Demo: invitación institucional preparada.')"><i class="ti ti-user-plus" aria-hidden="true"></i>Invitar colaborador</button>
+          </div>
+        </div>
+        <div class="panel url-config-panel">
+          <h3>Dominio y publicación</h3>
+          <div class="field-row">
+            <div class="field"><label>Subdominio</label><div class="subdomain-input"><input id="editSubdomain" value="recomendador-libros"><span>.estudiantes.uninorte.local</span></div><div class="hint">Entre 3 y 20 caracteres: minúsculas, números y guiones. No puede comenzar o terminar en guion.</div></div>
+            <div class="publication-status"><span class="badge badge-running"><span class="dot"></span>URL lista</span><strong>https://recomendador-libros.estudiantes.uninorte.local</strong><small>DNS, ruta, certificado TLS y endpoints disponibles.</small></div>
+          </div>
+          <button class="btn btn-secondary" type="button" onclick="checkSubdomain()">Comprobar disponibilidad</button>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="tab-retention">
+        <div class="retention-banner"><span class="badge badge-building"><span class="dot"></span>Retenido</span><h2>La aplicación está detenida y sus datos permanecen conservados</h2><p>Los recursos efímeros fueron retirados. El repositorio de GitHub y la cuenta institucional no se eliminarán.</p></div>
+        <div class="two-col">
+          <div class="panel"><h3>Periodo de retención</h3><div class="kv-row"><span class="k">Origen</span><span class="v">Eliminación voluntaria</span></div><div class="kv-row"><span class="k">Inicio</span><span class="v">3 sep 2026</span></div><div class="kv-row"><span class="k">Eliminación definitiva</span><span class="v">18 sep 2026</span></div><div class="kv-row"><span class="k">Snapshot</span><span class="v">Creado correctamente</span></div></div>
+          <div class="panel"><h3>Exportar o recuperar</h3><p class="panel-note">Puedes exportar archivos y base de datos mientras continúe la retención. El enlace vence en 24 horas y no incluye secretos.</p><div class="retention-actions"><button class="btn btn-secondary" onclick="showToast('Exportación solicitada. Se procesará de forma asíncrona.')">Solicitar exportación</button><button class="btn btn-primary" onclick="showToast('Recuperación solicitada. La eliminación definitiva queda pausada.')">Solicitar recuperación</button></div></div>
+        </div>
+        <div class="panel"><h3>Estado de los datos</h3><div class="retention-progress"><span>Volúmenes persistentes</span><strong>Conservados y cifrados</strong></div><div class="retention-progress"><span>Exportaciones</span><strong>Ninguna en curso</strong></div><div class="retention-progress"><span>Bloqueos</span><strong>No existen retenciones administrativas o legales</strong></div></div>
+      </div>
+    </main>
+  </div>
+</section>
+
+<div class="toast" id="toast"></div>
+</body>
+</html>
+
+

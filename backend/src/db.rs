@@ -8,6 +8,6 @@ pub async fn init_pool(database_url: &str) -> sqlx::Result<PgPool> {
         .await
 }
 
-pub async fn run_migrations(pool: &PgPool) -> sqlx::Result<()> {
+pub async fn run_migrations(pool: &PgPool) -> Result<(), sqlx::migrate::MigrateError> {
     sqlx::migrate!("./migrations").run(pool).await
 }

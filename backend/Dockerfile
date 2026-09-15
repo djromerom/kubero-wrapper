@@ -1,16 +1,13 @@
-FROM messense/rust-musl-cross:aarch64-musl AS build
+FROM rust:1-bookworm AS build
 WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
-RUN mkdir src && echo "fn main() {}" > src/main.rs
-RUN cargo build --release --target aarch64-unknown-linux-musl
 COPY migrations migrations
 COPY src src
-RUN touch src/main.rs
-RUN cargo build --release --target aarch64-unknown-linux-musl
+RUN cargo build --release --locked
 
-FROM alpine:3.19
-RUN apk add --no-cache ca-certificates tzdata
-COPY --from=build /app/target/aarch64-unknown-linux-musl/release/kubero-wrapper /usr/local/bin/
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates tzdata && rm -rf /var/lib/apt/lists/*
+COPY --from=build /app/target/release/kubero-wrapper /usr/local/bin/
 COPY migrations /app/migrations
 WORKDIR /app
 CMD ["kubero-wrapper"]

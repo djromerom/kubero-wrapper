@@ -1,0 +1,232 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Atlas — Panel administrativo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="vendor/tabler/tabler-icons-filled.min.css">
+<link rel="stylesheet" href="vendor/tabler/tabler-icons.min.css">
+<link rel="stylesheet" href="styles.css">
+<script src="scripts.js" defer></script>
+</head>
+<body data-page="admin" data-role="admin">
+
+<div class="modal-overlay" id="approvalDetailModal" role="dialog" aria-modal="true" aria-labelledby="approvalDetailTitle">
+  <div class="modal approval-detail-modal">
+    <div class="modal-head">
+      <span class="badge badge-pending"><span class="dot"></span>Validación pendiente</span>
+      <h2 id="approvalDetailTitle">Detalle de la solicitud</h2>
+      <p class="sub">Revisa la evidencia presentada antes de tomar una decisión.</p>
+    </div>
+    <div class="modal-body approval-detail-body">
+      <div class="detail-facts">
+        <div><span>Responsable</span><strong id="approvalOwner">—</strong></div>
+        <div><span>Repositorio</span><strong id="approvalRepo">—</strong></div>
+        <div><span>Rama</span><strong id="approvalBranch">—</strong></div>
+        <div><span>Commit presentado</span><strong class="mono" id="approvalSha">—</strong></div>
+        <div><span>Tipo</span><strong id="approvalType">—</strong></div>
+        <div><span>Asignatura</span><strong id="approvalCourse">—</strong></div>
+      </div>
+      <div class="approval-purpose"><span>Propósito funcional</span><p id="approvalPurpose">—</p></div>
+    </div>
+    <div class="modal-foot approval-detail-actions">
+      <button class="btn btn-secondary" type="button" onclick="closeApprovalDetail()">Cerrar</button>
+      <button class="btn btn-secondary" type="button" onclick="requestCorrectionsFromDetail()">Solicitar correcciones</button>
+      <button class="btn btn-primary validate-btn" type="button" onclick="openValidationConfirmation()">Validar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="adminDeleteModal" role="dialog" aria-modal="true" aria-labelledby="adminDeleteTitle">
+  <div class="modal destructive-modal">
+    <div class="modal-head"><span class="danger-kicker">Solicitud administrativa</span><h2 id="adminDeleteTitle">Solicitar eliminación</h2><p class="sub">La aplicación continuará funcionando durante el plazo concedido.</p></div>
+    <div class="modal-body">
+      <div class="field"><label>Motivo obligatorio</label><textarea id="adminDeleteReason" rows="4" placeholder="Explica por qué debe retirarse el proyecto."></textarea></div>
+      <div class="field-row"><div class="field"><label>Plazo para responder</label><select id="adminDeleteDeadline"><option value="7">7 días</option><option value="14" selected>14 días</option><option value="21">21 días</option></select></div><div class="field"><label>Retención posterior</label><select id="adminDeleteRetention"><option value="15">15 días</option><option value="30">30 días</option></select></div></div>
+      <div class="status-note">El desarrollador recibirá la solicitud y sus recordatorios. Podrá confirmar la eliminación o solicitar una única prórroga antes del vencimiento.</div>
+      <div class="confirmation-warning">Para confirmar, escribe exactamente <strong class="mono" id="adminDeleteExpected">dueño/repositorio</strong>.</div>
+      <div class="field"><label>Nombre del repositorio</label><input id="adminDeleteText" autocomplete="off" placeholder="dueño/repositorio"><div class="hint" id="adminDeleteError"></div></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-secondary" onclick="closeAdminDelete()">Cancelar</button><button class="btn btn-danger" onclick="confirmAdminDelete()">Crear solicitud</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="validationModal" role="dialog" aria-modal="true" aria-labelledby="validationTitle">
+  <div class="modal validation-modal">
+    <div class="modal-head"><h2 id="validationTitle">Confirmar validación</h2><p class="sub">Esta acción admite el proyecto e inicia su primer proceso técnico.</p></div>
+    <div class="modal-body">
+      <div class="confirmation-warning">Para confirmar, escribe exactamente <strong class="mono" id="validationExpected">dueño/repositorio</strong>.</div>
+      <div class="field"><label for="validationText">Nombre del repositorio</label><input id="validationText" autocomplete="off" placeholder="dueño/repositorio"><div class="hint" id="validationError"></div></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-secondary" type="button" onclick="closeValidationConfirmation()">Cancelar</button><button class="btn btn-primary validate-btn" type="button" onclick="confirmValidation()">Validar proyecto</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="correctionsModal" role="dialog" aria-modal="true" aria-labelledby="correctionsTitle">
+  <div class="modal corrections-modal">
+    <div class="modal-head">
+      <h2 id="correctionsTitle">Solicitar correcciones</h2>
+      <p class="sub" id="correctionsProject">Describe qué debe corregir el desarrollador antes de volver a presentar el proyecto.</p>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label for="correctionsText">Explicación obligatoria</label>
+        <textarea id="correctionsText" rows="5" placeholder="Explica de forma concreta los cambios requeridos."></textarea>
+        <div class="hint" id="correctionsError"></div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-secondary" type="button" onclick="closeCorrectionsModal()">Cancelar</button>
+      <button class="btn btn-primary" type="button" onclick="submitCorrections()">Enviar solicitud</button>
+    </div>
+  </div>
+</div>
+
+<section class="screen" id="admin">
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand"><i class="ti ti-globe-filled brand-mark" aria-hidden="true"></i><span class="brand-name">Atlas</span></div>
+      <div class="nav-item" onclick="window.location.href='developer.html?as=admin'">Mis proyectos</div>
+      <div class="nav-item active" onclick="go('admin')"><span class="dot"></span>Panel admin</div>
+      <div class="nav-item nav-subitem active" onclick="go('admin')">Clúster</div>
+      <div class="nav-item nav-subitem" onclick="go('adminprojects')">Proyectos</div>
+      <div class="sidebar-foot"><div class="who">Prof. Daniel Romero</div><div>Administrador</div></div>
+    </aside>
+    <main class="main">
+      <div class="page-head"><div><h1>Estado del clúster</h1><p>Resumen general de la infraestructura administrada por Atlas. Actualizado hoy a las 10:42:18.</p></div><span class="admin-health"><span class="dot"></span>Clúster saludable</span></div>
+
+      <div class="stat-strip">
+        <div class="stat-card"><div class="num">5</div><div class="lbl">Nodos</div></div>
+        <div class="stat-card"><div class="num">128</div><div class="lbl">Pods</div></div>
+        <div class="stat-card"><div class="num">43%</div><div class="lbl">CPU</div><div class="bar-track"><div class="bar-fill" style="width:43%;"></div></div></div>
+        <div class="stat-card"><div class="num">62%</div><div class="lbl">Memoria</div><div class="bar-track"><div class="bar-fill" style="width:62%;background:var(--amber);"></div></div></div>
+      </div>
+
+      <div class="two-col">
+        <div class="panel">
+          <h3>Nodos</h3>
+          <div class="node-row" style="font-weight:500;color:var(--muted);font-size:11.5px;"><span>NOMBRE</span><span>ESTADO</span><span>CPU</span><span>MEMORIA</span></div>
+          <div class="node-row"><span class="name">k3s-master</span><span class="badge badge-running" style="width:fit-content;"><span class="dot"></span>Listo</span><span>28%</span><span>45%</span></div>
+          <div class="node-row"><span class="name">k3s-node-1</span><span class="badge badge-running" style="width:fit-content;"><span class="dot"></span>Listo</span><span>35%</span><span>62%</span></div>
+          <div class="node-row"><span class="name">k3s-node-2</span><span class="badge badge-running" style="width:fit-content;"><span class="dot"></span>Listo</span><span>40%</span><span>47%</span></div>
+          <div class="node-row"><span class="name">k3s-node-3</span><span class="badge badge-running" style="width:fit-content;"><span class="dot"></span>Listo</span><span>30%</span><span>47%</span></div>
+          <div class="node-row"><span class="name">k3s-node-4</span><span class="badge badge-running" style="width:fit-content;"><span class="dot"></span>Listo</span><span>32%</span><span>60%</span></div>
+        </div>
+
+        <div class="panel">
+          <h3>Uso de recursos (últimos 60 min)</h3>
+          <svg viewBox="0 0 300 110" width="100%" height="110" preserveAspectRatio="none">
+            <polyline fill="none" stroke="#2D3AE8" stroke-width="2" points="0,70 30,60 60,75 90,50 120,65 150,40 180,55 210,35 240,48 270,30 300,42"/>
+            <polyline fill="none" stroke="#1E7A4C" stroke-width="2" points="0,90 30,85 60,92 90,78 120,88 150,70 180,80 210,65 240,75 270,60 300,68"/>
+          </svg>
+          <div class="chart-legend">
+            <div class="li"><span class="sw" style="background:#2D3AE8;"></span>CPU</div>
+            <div class="li"><span class="sw" style="background:#1E7A4C;"></span>Memoria</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="two-col">
+        <div class="panel">
+          <h3>Almacenamiento</h3>
+          <div style="display:flex;justify-content:space-between;font-size:13px;"><span>Usado: 512 GB</span><span style="color:var(--muted);">Total: 1.2 TB</span></div>
+          <div class="storage-bar"><div class="storage-fill" style="width:42%;"></div></div>
+          <div style="font-size:12px;color:var(--muted);">42% utilizado</div>
+        </div>
+        <div class="panel">
+          <h3>Pods por estado</h3>
+          <div class="donut-wrap">
+            <svg width="90" height="90" viewBox="0 0 42 42">
+              <circle cx="21" cy="21" r="15.9" fill="none" stroke="#EDEFE9" stroke-width="6"></circle>
+              <circle cx="21" cy="21" r="15.9" fill="none" stroke="#1E7A4C" stroke-width="6" stroke-dasharray="77 100" stroke-dashoffset="25" transform="rotate(-90 21 21)"></circle>
+              <circle cx="21" cy="21" r="15.9" fill="none" stroke="#A9750A" stroke-width="6" stroke-dasharray="9 100" stroke-dashoffset="-52" transform="rotate(-90 21 21)"></circle>
+              <circle cx="21" cy="21" r="15.9" fill="none" stroke="#B7402A" stroke-width="6" stroke-dasharray="5 100" stroke-dashoffset="-61" transform="rotate(-90 21 21)"></circle>
+            </svg>
+            <div class="donut-legend">
+              <div class="li"><span class="sw" style="background:#1E7A4C;"></span>En ejecución (98 · 77%)</div>
+              <div class="li"><span class="sw" style="background:#A9750A;"></span>Pendiente (12 · 9%)</div>
+              <div class="li"><span class="sw" style="background:#B7402A;"></span>Fallido (6 · 5%)</div>
+              <div class="li"><span class="sw" style="background:#DBDED5;"></span>Desconocido (12 · 9%)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="two-col operations-grid">
+        <div class="panel"><div class="panel-title-row"><h3>Certificados TLS</h3><span class="badge badge-building"><span class="dot"></span>2 próximos a vencer</span></div><div class="operation-row"><span>recomendador-libros</span><strong>Vigente · 48 días</strong></div><div class="operation-row"><span>portal-tutorias</span><strong class="warning-text">Vence en 12 días</strong></div><div class="operation-row"><span>api-biblioteca</span><strong class="warning-text">Vence en 8 días</strong></div></div>
+        <div class="panel"><div class="panel-title-row"><h3>Trabajos de la plataforma</h3><span class="badge badge-error"><span class="dot"></span>1 requiere atención</span></div><div class="operation-row"><span>CI/CD activos</span><strong>7</strong></div><div class="operation-row"><span>En cola</span><strong>3</strong></div><div class="operation-row"><span>Atascados</span><strong class="error-text">1 · hace 18 min</strong></div></div>
+      </div>
+      <div class="stat-strip lifecycle-strip"><div class="stat-card"><div class="num">30</div><div class="lbl">Aplicaciones desplegadas</div></div><div class="stat-card accent-building"><div class="num">4</div><div class="lbl">Despliegues activos</div></div><div class="stat-card accent-pending"><div class="num">2</div><div class="lbl">Proyectos suspendidos</div></div><div class="stat-card accent-error"><div class="num">3</div><div class="lbl">Proyectos fallidos</div></div></div>
+      <div id="auditPanel" class="panel audit-panel">
+        <div class="audit-head">
+          <div><div class="audit-title">Historial de auditoría</div><div class="audit-subtitle">Acciones administrativas recientes.</div></div>
+          <button class="btn btn-secondary audit-toggle" id="auditToggle" type="button" onclick="openAudit()" aria-expanded="true" aria-controls="auditList" aria-label="Ocultar historial" title="Ocultar historial"><i class="ti ti-eye" aria-hidden="true"></i></button>
+        </div>
+        <div class="audit-list" id="auditList">
+          <div class="audit-row"><b>Aprobó “recomendador-libros”</b><span>Sarik Bonadiez</span><span>Hoy · 09:12</span></div>
+          <div class="audit-row"><b>Rechazó “Dulce Ana”</b><span>Administrador</span><span>Ayer · 16:40</span></div>
+        </div>
+      </div>
+    </main>
+  </div>
+</section>
+
+<section class="screen" id="adminprojects">
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand"><i class="ti ti-globe-filled brand-mark" aria-hidden="true"></i><span class="brand-name">Atlas</span></div>
+      <div class="nav-item" onclick="window.location.href='developer.html?as=admin'">Mis proyectos</div>
+      <div class="nav-item active" onclick="go('admin')"><span class="dot"></span>Panel admin</div>
+      <div class="nav-item nav-subitem" onclick="go('admin')">Clúster</div>
+      <div class="nav-item nav-subitem active" onclick="go('adminprojects')">Proyectos</div>
+      <div class="sidebar-foot"><div class="who">Prof. Daniel Romero</div><div>Administrador</div></div>
+    </aside>
+    <main class="main">
+      <div class="page-head"><div><h1>Proyectos</h1><p>Administra las solicitudes pendientes y los proyectos registrados en la plataforma.</p></div></div>
+
+      <section class="pending-approvals" aria-labelledby="pendingApprovalsTitle">
+        <div class="section-heading">
+          <h2 id="pendingApprovalsTitle">Pendientes de revisión</h2>
+        </div>
+        <div class="approval-grid">
+          <div class="approval-item" role="button" tabindex="0" data-project="Portafolio personal" data-owner="Sarik Bonadiez" data-repo="sarikr/portafolio-web" data-branch="main" data-sha="43c9a7d1e815bb3d9416a0b14cb3544d91c9c87e" data-type="Académico" data-course="Diseño Web II" data-purpose="Portafolio funcional para presentar proyectos desarrollados durante la asignatura." onclick="openApprovalDetail(this)" onkeydown="if(event.key==='Enter') openApprovalDetail(this)">
+            <h3>Portafolio personal</h3><div class="who">Sarik Bonadiez</div><div class="repo">github.com/sarikr/portafolio-web</div><span class="approval-open">Ver solicitud <i class="ti ti-arrow-right"></i></span>
+          </div>
+          <div class="approval-item" role="button" tabindex="0" data-project="Landing de repostería Dulce Ana" data-owner="Camilo Herrera" data-repo="cherrera/dulce-ana" data-branch="main" data-sha="6a9e2cb7bc773160ad230565cae12b24f5184fa1" data-type="No académico" data-course="No aplica" data-purpose="Sitio para gestionar el catálogo y los pedidos de un emprendimiento vinculado a la comunidad universitaria." onclick="openApprovalDetail(this)" onkeydown="if(event.key==='Enter') openApprovalDetail(this)">
+            <h3>Landing de repostería “Dulce Ana”</h3><div class="who">Camilo Herrera</div><div class="repo">github.com/cherrera/dulce-ana</div><span class="approval-open">Ver solicitud <i class="ti ti-arrow-right"></i></span>
+          </div>
+          <div class="approval-item" role="button" tabindex="0" data-project="API de biblioteca" data-owner="Laura Méndez" data-repo="lauramendez/api-biblioteca" data-branch="main" data-sha="9f2d884cdda12bd42cef659fabab67b36ff8150c" data-type="Académico" data-course="Ingeniería de Software" data-purpose="API para consultar disponibilidad y gestionar préstamos del catálogo bibliográfico." onclick="openApprovalDetail(this)" onkeydown="if(event.key==='Enter') openApprovalDetail(this)">
+            <h3>API de biblioteca</h3><div class="who">Laura Méndez</div><div class="repo">github.com/lauramendez/api-biblioteca</div><span class="approval-open">Ver solicitud <i class="ti ti-arrow-right"></i></span>
+          </div>
+        </div>
+      </section>
+
+      <div class="section-heading projects-heading">
+        <h2>Todos los proyectos</h2>
+      </div>
+
+      <div class="filters">
+        <span class="filter-chip active" onclick="filterAdminProjects('all', this)">Todos</span>
+        <span class="filter-chip" onclick="filterAdminProjects('running', this)">Desplegados</span>
+        <span class="filter-chip" onclick="filterAdminProjects('building', this)">CI en ejecución</span>
+        <span class="filter-chip" onclick="filterAdminProjects('pending', this)">Validación pendiente</span>
+        <span class="filter-chip" onclick="filterAdminProjects('error', this)">Fallidos</span>
+      </div>
+
+      <div class="project-catalog">
+        <article class="project-card project-deployed"><div class="project-card-head action-menu-wrap"><h3 class="proj-name">api-gateway</h3><button type="button" class="row-action-btn" aria-label="Acciones de api-gateway" onclick="toggleActionMenu(this)">⋮</button><span class="action-menu"><button onclick="actionViewProject()">Ver proyecto</button><button onclick="actionBuilds()">Ver builds</button><button onclick="actionLogs()">Ver logs</button><button onclick="actionUrl()">Ver URL</button><button onclick="actionRetryBuild()">Reintentar build</button><button class="danger" onclick="actionDeleteProject()">Eliminar proyecto</button></span></div><div class="project-owner">alejandro.dev</div><span class="badge badge-running"><span class="dot"></span>Desplegado</span><div class="project-build"><span>Última ejecución</span><strong>Hace 5 min</strong><small>#42</small></div></article>
+        <article class="project-card project-building"><div class="project-card-head action-menu-wrap"><h3 class="proj-name">frontend-web</h3><button type="button" class="row-action-btn" aria-label="Acciones de frontend-web" onclick="toggleActionMenu(this)">⋮</button><span class="action-menu"><button onclick="actionViewProject()">Ver proyecto</button><button onclick="actionBuilds()">Ver builds</button><button onclick="actionLogs()">Ver logs</button><button onclick="actionUrl()">Ver URL</button><button onclick="actionRetryBuild()">Reintentar build</button><button class="danger" onclick="actionDeleteProject()">Eliminar proyecto</button></span></div><div class="project-owner">alejandro.dev</div><span class="badge badge-building"><span class="dot"></span>CI en ejecución</span><div class="project-build"><span>Última ejecución</span><strong>Hace 1 min</strong><small>#15</small></div></article>
+        <article class="project-card project-pending"><div class="project-card-head action-menu-wrap"><h3 class="proj-name">mi-service</h3><button type="button" class="row-action-btn" aria-label="Acciones de mi-service" onclick="toggleActionMenu(this)">⋮</button><span class="action-menu"><button onclick="actionViewProject()">Ver proyecto</button><button onclick="actionBuilds()">Ver builds</button><button onclick="actionLogs()">Ver logs</button><button onclick="actionUrl()">Ver URL</button><button onclick="actionRetryBuild()">Reintentar build</button><button class="danger" onclick="actionDeleteProject()">Eliminar proyecto</button></span></div><div class="project-owner">alejandro.dev</div><span class="badge badge-pending"><span class="dot"></span>Validación pendiente</span><div class="project-build"><span>Última ejecución</span><strong>Hace 2 h</strong><small>#8</small></div></article>
+        <article class="project-card project-deployed"><div class="project-card-head action-menu-wrap"><h3 class="proj-name">chat-app</h3><button type="button" class="row-action-btn" aria-label="Acciones de chat-app" onclick="toggleActionMenu(this)">⋮</button><span class="action-menu"><button onclick="actionViewProject()">Ver proyecto</button><button onclick="actionBuilds()">Ver builds</button><button onclick="actionLogs()">Ver logs</button><button onclick="actionUrl()">Ver URL</button><button onclick="actionRetryBuild()">Reintentar build</button><button class="danger" onclick="actionDeleteProject()">Eliminar proyecto</button></span></div><div class="project-owner">maria.dev</div><span class="badge badge-running"><span class="dot"></span>Desplegado</span><div class="project-build"><span>Última ejecución</span><strong>Hace 3 h</strong><small>#21</small></div></article>
+        <article class="project-card project-error"><div class="project-card-head action-menu-wrap"><h3 class="proj-name">blog-platform</h3><button type="button" class="row-action-btn" aria-label="Acciones de blog-platform" onclick="toggleActionMenu(this)">⋮</button><span class="action-menu"><button onclick="actionViewProject()">Ver proyecto</button><button onclick="actionBuilds()">Ver builds</button><button onclick="actionLogs()">Ver logs</button><button onclick="actionUrl()">Ver URL</button><button onclick="actionRetryBuild()">Reintentar build</button><button class="danger" onclick="actionDeleteProject()">Eliminar proyecto</button></span></div><div class="project-owner">juan.dev</div><span class="badge badge-error"><span class="dot"></span>ci fallido</span><div class="project-build"><span>Última ejecución</span><strong>Hace 5 h</strong><small>#13</small></div></article>
+      </div>
+      <div class="catalog-foot"><span>Mostrando 1 a 5 de 17 proyectos</span><div class="pager"><button class="active">1</button><button>2</button><button>3</button><button>4</button><button>›</button></div></div>    </main>
+  </div>
+</section>
+
+<div class="toast" id="toast"></div>
+</body>
+</html>
+

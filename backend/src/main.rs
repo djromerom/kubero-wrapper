@@ -3,6 +3,7 @@ mod config;
 mod db;
 mod error;
 mod events;
+mod github;
 mod kubero;
 mod models;
 mod routes;
@@ -26,16 +27,26 @@ async fn main() -> anyhow::Result<()> {
     db::run_migrations(&pool).await?;
     tracing::info!("Database migrations applied");
 
-    let event_bus = events::EventBus::new(&cfg.redis_url);
+    let event_bus = events::EventBus::new(&cfg.redis_url).await;
 
     let kubero = match kubero::KuberoManager::new_in_cluster().await {
         Ok(m) => {
             tracing::info!("Connected to Kubernetes cluster (in-cluster)");
-            m
+            Some(m)
         }
         Err(_) => {
             tracing::warn!("No in-cluster config, trying kubeconfig file");
-            kubero::KuberoManager::new(&cfg.kube_config_path).await?
+            match kubero::KuberoManager::new(&cfg.kube_config_path).await {
+                Ok(m) => {
+                    tracing::info!("Connected to Kubernetes cluster using kubeconfig");
+                    Some(m)
+                }
+                Err(error) if cfg.kubernetes_required => return Err(error.into()),
+                Err(error) => {
+                    tracing::warn!("Kubernetes unavailable; cluster operations are disabled: {}", error);
+                    None
+                }
+            }
         }
     };
 

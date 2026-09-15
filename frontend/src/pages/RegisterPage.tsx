@@ -1,3 +1,4 @@
+import AuthLayout from '../components/AuthLayout';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api';
@@ -24,49 +25,49 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-      <div className="bg-gray-800 p-8 rounded-lg w-full max-w-sm">
-        <h1 className="text-2xl font-bold text-cyan-400 mb-6 text-center">Create Account</h1>
+    <AuthLayout>
+      <div>
+        <h1 className="text-2xl font-bold text-atlas-red mb-6 text-center">Crea tu cuenta de Atlas</h1>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Name</label>
+            <label className="block text-sm text-atlas-muted mb-1" htmlFor="name">Nombre</label>
             <input
-              value={name}
+              id="name" autoComplete="name" value={name}
               onChange={e => setName(e.target.value)}
-              className="w-full bg-gray-700 rounded px-3 py-2 text-white"
+              className="w-full bg-atlas-mist rounded px-3 py-2 text-atlas-ink"
               required
             />
           </div>
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Email</label>
+            <label className="block text-sm text-atlas-muted mb-1" htmlFor="email">Correo electrónico</label>
             <input
-              type="email"
+              id="email" autoComplete="email" type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
-              className="w-full bg-gray-700 rounded px-3 py-2 text-white"
+              className="w-full bg-atlas-mist rounded px-3 py-2 text-atlas-ink"
               required
             />
           </div>
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Password</label>
+            <label className="block text-sm text-atlas-muted mb-1" htmlFor="password">Contraseña</label>
             <input
-              type="password"
+              id="password" autoComplete="new-password" type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
-              className="w-full bg-gray-700 rounded px-3 py-2 text-white"
+              className="w-full bg-atlas-mist rounded px-3 py-2 text-atlas-ink"
               required
               minLength={6}
             />
           </div>
-          {error && <p className="text-red-400 text-sm">{error}</p>}
-          <button type="submit" className="w-full bg-cyan-600 py-2 rounded hover:bg-cyan-500">
-            Register
+          {error && <p className="text-atlas-red text-sm">{error}</p>}
+          <button type="submit" className="w-full bg-atlas-red text-white py-2 rounded hover:bg-atlas-ink">
+            Registrarse
           </button>
         </form>
-        <p className="mt-4 text-center text-sm text-gray-400">
-          Already have an account? <Link to="/login" className="text-cyan-400 hover:underline">Login</Link>
+        <p className="mt-4 text-center text-sm text-atlas-muted">
+          ¿Ya tienes cuenta? <Link to="/login" className="text-atlas-red hover:underline">Iniciar sesión</Link>
         </p>
       </div>
-    </div>
+    </AuthLayout>
   );
 }

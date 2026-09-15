@@ -1,5 +1,5 @@
 use axum::extract::ws::{Message, WebSocket};
-use futures::stream::SplitSink;
+use futures::{SinkExt, StreamExt};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{broadcast, Mutex, RwLock};
@@ -48,7 +48,7 @@ impl WsManager {
             }
         });
 
-        while let Some(Ok(msg)) = receiver.recv().await {
+        while let Some(Ok(msg)) = receiver.next().await {
             if let Message::Close(_) = msg {
                 break;
             }

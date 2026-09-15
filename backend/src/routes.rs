@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, State, WebSocketUpgrade, ws},
+    extract::{Path, State, WebSocketUpgrade},
     http::StatusCode,
     middleware,
     response::IntoResponse,
@@ -12,9 +12,9 @@ use uuid::Uuid;
 use crate::{
     auth::{self, AuthUser},
     config::Config,
-    db,
     error::{AppError, AppResult},
     events::EventBus,
+    github,
     kubero::KuberoManager,
     models::*,
     ws::WsManager,
@@ -25,39 +25,51 @@ pub struct AppState {
     pub config: Config,
     pub db: sqlx::PgPool,
     pub event_bus: EventBus,
-    pub kubero: KuberoManager,
+    pub kubero: Option<KuberoManager>,
     pub ws_manager: WsManager,
 }
 
 pub fn create_router(state: AppState) -> Router {
     let public_routes = Router::new()
-        .route("/health", get(health_check))
-        .route("/auth/register", post(register))
-        .route("/auth/login", post(login));
+        .route("/api/health", get(health_check))
+        .route("/api/auth/register", post(register))
+        .route("/api/auth/login", post(login))
+        .route("/api/github/callback", get(github::callback));
 
     let protected_routes = Router::new()
-        .route("/projects", get(list_projects).post(create_project))
-        .route("/projects/{id}", get(get_project).delete(delete_project))
-        .route("/projects/{id}/builds", get(list_builds))
-        .route("/projects/{id}/webhook", get(get_webhook))
-        .route("/ws", get(ws_handler))
+        .route("/api/projects", get(list_projects).post(create_project))
+        .route("/api/projects/:id", get(get_project).delete(delete_project))
+        .route("/api/projects/:id/builds", get(list_builds))
+        .route("/api/projects/:id/webhook", get(get_webhook))
+        .route("/api/ws", get(ws_handler))
+        .route("/api/github/status", get(github::status))
+        .route("/api/github/connect", get(github::connect))
+        .route("/api/github/repositories", get(github::repositories))
+        .route(
+            "/api/github/repositories/:owner/:repo/branches",
+            get(github::branches),
+        )
+        .route(
+            "/api/github/repositories/:owner/:repo/latest-commit",
+            get(github::latest_commit),
+        )
         .route_layer(middleware::from_fn_with_state(
-            state.clone(),
+            state.config.clone(),
             auth::auth_middleware,
         ));
 
     let admin_routes = Router::new()
-        .route("/admin/projects", get(admin_list_projects))
-        .route("/admin/projects/{id}", delete(admin_delete_project))
-        .route("/admin/cluster", get(cluster_status))
+        .route("/api/admin/projects", get(admin_list_projects))
+        .route("/api/admin/projects/:id", delete(admin_delete_project))
+        .route("/api/admin/cluster", get(cluster_status))
+        .route_layer(middleware::from_fn(auth::admin_middleware))
         .route_layer(middleware::from_fn_with_state(
-            state.clone(),
+            state.config.clone(),
             auth::auth_middleware,
-        ))
-        .route_layer(middleware::from_fn(auth::admin_middleware));
+        ));
 
     let webhook_routes = Router::new()
-        .route("/webhook/{project_id}", post(handle_webhook));
+        .route("/api/webhook/:project_id", post(handle_webhook));
 
     Router::new()
         .merge(public_routes)
@@ -150,6 +162,13 @@ async fn create_project(
     Extension(auth_user): Extension<AuthUser>,
     Json(req): Json<CreateProjectRequest>,
 ) -> AppResult<(StatusCode, Json<ProjectResponse>)> {
+    let (commit_sha, commit_message) = github::validate_project_source(
+        &state,
+        auth_user.id,
+        &req.repo_url,
+        &req.branch,
+    )
+    .await?;
     let slug = slugify(&req.name);
     let webhook_secret = uuid::Uuid::new_v4().to_string();
     let domain = format!("{}.{}", slug, state.config.domain_suffix);
@@ -175,6 +194,8 @@ async fn create_project(
         "repo_url": project.repo_url,
         "branch": project.branch,
         "domain": project.domain,
+        "commit_sha": commit_sha,
+        "commit_message": commit_message,
     })).await;
 
     Ok((StatusCode::CREATED, Json(project.into())))
@@ -284,7 +305,7 @@ async fn handle_webhook(
     headers: axum::http::HeaderMap,
     body: String,
 ) -> AppResult<StatusCode> {
-    let project = sqlx::query_as::<_, Project>(
+    let _project = sqlx::query_as::<_, Project>(
         "SELECT * FROM projects WHERE id = $1 AND status != 'deleted'",
     )
     .bind(project_id)
@@ -292,7 +313,7 @@ async fn handle_webhook(
     .await?
     .ok_or(AppError::NotFound)?;
 
-    let signature = headers
+    let _signature = headers
         .get("x-hub-signature-256")
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
@@ -357,7 +378,10 @@ async fn admin_delete_project(
 }
 
 async fn cluster_status(State(state): State<AppState>) -> AppResult<Json<ClusterStatus>> {
-    let status = state.kubero.get_cluster_status().await?;
+    let kubero = state.kubero.as_ref().ok_or_else(|| {
+        AppError::Internal("Kubernetes is not configured for this environment".into())
+    })?;
+    let status = kubero.get_cluster_status().await?;
     Ok(Json(status))
 }
 

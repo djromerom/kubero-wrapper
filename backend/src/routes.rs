@@ -41,6 +41,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/projects/:id", get(get_project).delete(delete_project))
         .route("/api/projects/:id/builds", get(list_builds))
         .route("/api/projects/:id/webhook", get(get_webhook))
+        .route("/api/projects/:id/deployment-status", get(get_deployment_status))
         .route("/api/ws", get(ws_handler))
         .route("/api/github/status", get(github::status))
         .route("/api/github/connect", get(github::connect))
@@ -176,7 +177,9 @@ async fn create_project(
 
     let project = sqlx::query_as::<_, Project>(
         "INSERT INTO projects (user_id, name, slug, repo_url, branch, domain, webhook_secret) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
+         VALUES ($1, $2, $3, $4, $5, $6, $7) \
+         RETURNING id, user_id, name, slug, repo_url, branch, status::text AS status, \
+         domain, webhook_secret, kubero_pipeline, kubero_app, created_at, updated_at",
     )
     .bind(auth_user.id)
     .bind(&req.name)
@@ -188,16 +191,64 @@ async fn create_project(
     .fetch_one(&state.db)
     .await?;
 
-    state.event_bus.publish("project.created", &json!({
-        "project_id": project.id,
-        "user_id": project.user_id,
-        "slug": project.slug,
-        "repo_url": project.repo_url,
-        "branch": project.branch,
-        "domain": project.domain,
-        "commit_sha": commit_sha,
-        "commit_message": commit_message,
-    })).await;
+    // Create Kubero CRDs if Kubernetes is configured
+    if let Some(kubero) = &state.kubero {
+        let namespace = &state.config.kubero_namespace;
+        let pipeline_name = kubero.create_pipeline_crd(
+            namespace,
+            &slug,
+            &req.repo_url,
+            &req.branch,
+            &domain,
+        ).await?;
+
+        let app_name = kubero.create_app_crd(
+            namespace,
+            &slug,
+            &req.repo_url,
+            &req.branch,
+            &pipeline_name,
+            &domain,
+            &state.config.registry_url,
+        ).await?;
+
+        // Update project with Kubero resource names
+        sqlx::query(
+            "UPDATE projects SET kubero_pipeline = $1, kubero_app = $2 WHERE id = $3",
+        )
+        .bind(&pipeline_name)
+        .bind(&app_name)
+        .bind(project.id)
+        .execute(&state.db)
+        .await?;
+
+        // Trigger the initial build
+        let _ = kubero.trigger_build(namespace, &app_name).await;
+
+        state.event_bus.publish("project.created", &json!({
+            "project_id": project.id,
+            "user_id": project.user_id,
+            "slug": project.slug,
+            "repo_url": project.repo_url,
+            "branch": project.branch,
+            "domain": project.domain,
+            "commit_sha": commit_sha,
+            "commit_message": commit_message,
+            "kubero_pipeline": pipeline_name,
+            "kubero_app": app_name,
+        })).await;
+    } else {
+        state.event_bus.publish("project.created", &json!({
+            "project_id": project.id,
+            "user_id": project.user_id,
+            "slug": project.slug,
+            "repo_url": project.repo_url,
+            "branch": project.branch,
+            "domain": project.domain,
+            "commit_sha": commit_sha,
+            "commit_message": commit_message,
+        })).await;
+    }
 
     Ok((StatusCode::CREATED, Json(project.into())))
 }
@@ -207,7 +258,9 @@ async fn list_projects(
     Extension(auth_user): Extension<AuthUser>,
 ) -> AppResult<Json<Vec<ProjectResponse>>> {
     let projects = sqlx::query_as::<_, Project>(
-        "SELECT * FROM projects WHERE user_id = $1 AND status != 'deleted' ORDER BY created_at DESC",
+        "SELECT id, user_id, name, slug, repo_url, branch, status::text AS status, \
+         domain, webhook_secret, kubero_pipeline, kubero_app, created_at, updated_at \
+         FROM projects WHERE user_id = $1 AND status != 'deleted' ORDER BY created_at DESC",
     )
     .bind(auth_user.id)
     .fetch_all(&state.db)
@@ -222,7 +275,9 @@ async fn get_project(
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<ProjectResponse>> {
     let project = sqlx::query_as::<_, Project>(
-        "SELECT * FROM projects WHERE id = $1 AND user_id = $2 AND status != 'deleted'",
+        "SELECT id, user_id, name, slug, repo_url, branch, status::text AS status, \
+         domain, webhook_secret, kubero_pipeline, kubero_app, created_at, updated_at \
+         FROM projects WHERE id = $1 AND user_id = $2 AND status != 'deleted'",
     )
     .bind(id)
     .bind(auth_user.id)
@@ -239,13 +294,26 @@ async fn delete_project(
     Path(id): Path<Uuid>,
 ) -> AppResult<StatusCode> {
     let project = sqlx::query_as::<_, Project>(
-        "SELECT * FROM projects WHERE id = $1 AND user_id = $2",
+        "SELECT id, user_id, name, slug, repo_url, branch, status::text AS status, \
+         domain, webhook_secret, kubero_pipeline, kubero_app, created_at, updated_at \
+         FROM projects WHERE id = $1 AND user_id = $2",
     )
     .bind(id)
     .bind(auth_user.id)
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound)?;
+
+    // Delete Kubero CRDs if they exist
+    if let Some(kubero) = &state.kubero {
+        let namespace = &state.config.kubero_namespace;
+        if let Some(pipeline_name) = &project.kubero_pipeline {
+            let _ = kubero.delete_pipeline_crd(namespace, pipeline_name).await;
+        }
+        if let Some(app_name) = &project.kubero_app {
+            let _ = kubero.delete_app_crd(namespace, app_name).await;
+        }
+    }
 
     sqlx::query("UPDATE projects SET status = 'deleted' WHERE id = $1")
         .bind(id)
@@ -267,7 +335,9 @@ async fn list_builds(
     Path(project_id): Path<Uuid>,
 ) -> AppResult<Json<Vec<BuildResponse>>> {
     let builds = sqlx::query_as::<_, Build>(
-        "SELECT b.* FROM builds b \
+        "SELECT b.id, b.project_id, b.status::text AS status, b.logs, b.commit_sha, \
+         b.commit_message, b.started_at, b.completed_at, b.created_at \
+         FROM builds b \
          JOIN projects p ON p.id = b.project_id \
          WHERE b.project_id = $1 AND p.user_id = $2 \
          ORDER BY b.created_at DESC LIMIT 50",
@@ -286,7 +356,9 @@ async fn get_webhook(
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<serde_json::Value>> {
     let project = sqlx::query_as::<_, Project>(
-        "SELECT * FROM projects WHERE id = $1 AND user_id = $2 AND status != 'deleted'",
+        "SELECT id, user_id, name, slug, repo_url, branch, status::text AS status, \
+         domain, webhook_secret, kubero_pipeline, kubero_app, created_at, updated_at \
+         FROM projects WHERE id = $1 AND user_id = $2 AND status != 'deleted'",
     )
     .bind(id)
     .bind(auth_user.id)
@@ -300,6 +372,47 @@ async fn get_webhook(
     })))
 }
 
+async fn get_deployment_status(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+    Path(id): Path<Uuid>,
+) -> AppResult<Json<serde_json::Value>> {
+    let project = sqlx::query_as::<_, Project>(
+        "SELECT id, user_id, name, slug, repo_url, branch, status::text AS status, \
+         domain, webhook_secret, kubero_pipeline, kubero_app, created_at, updated_at \
+         FROM projects WHERE id = $1 AND user_id = $2 AND status != 'deleted'",
+    )
+    .bind(id)
+    .bind(auth_user.id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound)?;
+
+    if let Some(kubero) = &state.kubero {
+        if let Some(app_name) = &project.kubero_app {
+            let namespace = &state.config.kubero_namespace;
+            let status = kubero.get_app_status(namespace, app_name).await?;
+            return Ok(Json(json!({
+                "project_id": project.id,
+                "project_name": project.name,
+                "slug": project.slug,
+                "domain": project.domain,
+                "kubero_status": status,
+            })));
+        }
+    }
+
+    // Fallback if Kubernetes is not configured or app doesn't exist yet
+    Ok(Json(json!({
+        "project_id": project.id,
+        "project_name": project.name,
+        "slug": project.slug,
+        "domain": project.domain,
+        "kubero_status": null,
+        "message": "Kubernetes not configured or deployment not yet created",
+    })))
+}
+
 async fn handle_webhook(
     State(state): State<AppState>,
     Path(project_id): Path<Uuid>,
@@ -307,7 +420,9 @@ async fn handle_webhook(
     body: String,
 ) -> AppResult<StatusCode> {
     let _project = sqlx::query_as::<_, Project>(
-        "SELECT * FROM projects WHERE id = $1 AND status != 'deleted'",
+        "SELECT id, user_id, name, slug, repo_url, branch, status::text AS status, \
+         domain, webhook_secret, kubero_pipeline, kubero_app, created_at, updated_at \
+         FROM projects WHERE id = $1 AND status != 'deleted'",
     )
     .bind(project_id)
     .fetch_optional(&state.db)
@@ -346,7 +461,9 @@ async fn admin_list_projects(
     State(state): State<AppState>,
 ) -> AppResult<Json<Vec<ProjectResponse>>> {
     let projects = sqlx::query_as::<_, Project>(
-        "SELECT * FROM projects WHERE status != 'deleted' ORDER BY created_at DESC",
+        "SELECT id, user_id, name, slug, repo_url, branch, status::text AS status, \
+         domain, webhook_secret, kubero_pipeline, kubero_app, created_at, updated_at \
+         FROM projects WHERE status != 'deleted' ORDER BY created_at DESC",
     )
     .fetch_all(&state.db)
     .await?;
@@ -358,11 +475,15 @@ async fn admin_delete_project(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> AppResult<StatusCode> {
-    let project = sqlx::query_as::<_, Project>("SELECT * FROM projects WHERE id = $1")
-        .bind(id)
-        .fetch_optional(&state.db)
-        .await?
-        .ok_or(AppError::NotFound)?;
+    let project = sqlx::query_as::<_, Project>(
+        "SELECT id, user_id, name, slug, repo_url, branch, status::text AS status, \
+         domain, webhook_secret, kubero_pipeline, kubero_app, created_at, updated_at \
+         FROM projects WHERE id = $1",
+    )
+    .bind(id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound)?;
 
     sqlx::query("UPDATE projects SET status = 'deleted' WHERE id = $1")
         .bind(id)

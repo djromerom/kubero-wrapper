@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, type User } from '../api';
-import { getDemoUser, isDemoGithubLinked, linkDemoGithub } from '../demoSession';
+import { getDemoUser, isDemoGithubLinked, linkDemoGithub, unlinkDemoGithub } from '../demoSession';
 
 export default function ProfilePanel({ user }: { user: User | null }) {
   const [settings, setSettings] = useState(false);
@@ -45,6 +45,22 @@ export default function ProfilePanel({ user }: { user: User | null }) {
     }
   }
 
+  async function disconnectGithub() {
+    if (!window.confirm('¿Quieres desvincular tu cuenta de GitHub de Atlas?')) return;
+    setError('');
+    setLoading(true);
+    try {
+      if (demo) unlinkDemoGithub();
+      else await api.githubDisconnect();
+      setLinked(false);
+      setGithubLogin('');
+    } catch (cause) {
+      setError((cause as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return <>
     <div className="mb-4 mt-6 flex h-14 w-14 items-center justify-center rounded-full bg-atlas-mist text-atlas-ink" aria-hidden="true">
       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="12" cy="7" r="4"/><path d="M5 21v-3a7 7 0 0 1 14 0v3"/></svg>
@@ -65,7 +81,10 @@ export default function ProfilePanel({ user }: { user: User | null }) {
       <p className="mt-3 text-xs leading-relaxed text-atlas-muted">Vincula tu cuenta para seleccionar repositorios y ramas autorizados.</p>
       <button type="button" onClick={connectGithub} disabled={loading} className="mt-3 w-full rounded-lg bg-atlas-ink px-3 py-3 text-sm font-semibold text-white hover:bg-atlas-red disabled:opacity-50">{loading ? 'Conectando…' : demo ? 'Vincular GitHub (demo)' : 'Vincular GitHub'}</button>
     </>}
-    {linked && <p className="mt-3 rounded-lg bg-atlas-mist p-3 text-xs leading-relaxed text-atlas-muted">La integración puede leer únicamente los repositorios autorizados para esta cuenta.</p>}
+    {linked && <>
+      <p className="mt-3 rounded-lg bg-atlas-mist p-3 text-xs leading-relaxed text-atlas-muted">La integración puede leer únicamente los repositorios autorizados para esta cuenta.</p>
+      <button type="button" onClick={disconnectGithub} disabled={loading} className="mt-3 w-full rounded-lg border border-atlas-red px-3 py-3 text-sm font-semibold text-atlas-red hover:bg-atlas-red hover:text-white disabled:opacity-50">{loading ? 'Desvinculando…' : 'Desvincular GitHub'}</button>
+    </>}
     {error && <p className="mt-3 text-xs text-atlas-red" role="alert">{error}</p>}
     <button type="button" aria-expanded={settings} aria-controls="profile-settings" onClick={() => setSettings(!settings)} className="mt-4 w-full rounded-lg bg-atlas-red px-3 py-3 text-sm font-semibold text-white hover:bg-atlas-ink">Más ajustes</button>
     {settings && <section id="profile-settings" aria-label="Más ajustes" className="mt-4 border-t border-atlas-mist pt-4"><h4 className="text-sm font-semibold">Ajustes de la cuenta</h4><p className="mt-2 text-xs leading-relaxed text-atlas-muted">Los ajustes de cuenta y preferencias estarán disponibles cuando se conecten los servicios institucionales.</p></section>}

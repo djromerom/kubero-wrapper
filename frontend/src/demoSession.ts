@@ -14,6 +14,7 @@ export function startDemo(role: DemoRole) {
 }
 export function isDemoGithubLinked() { return sessionStorage.getItem(GITHUB_KEY) === 'true'; }
 export function linkDemoGithub() { sessionStorage.setItem(GITHUB_KEY, 'true'); }
+export function unlinkDemoGithub() { sessionStorage.removeItem(GITHUB_KEY); }
 export function endDemo() {
   sessionStorage.removeItem(KEY);
   sessionStorage.removeItem(GITHUB_KEY);

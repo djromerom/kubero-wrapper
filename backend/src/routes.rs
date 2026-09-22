@@ -44,6 +44,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/ws", get(ws_handler))
         .route("/api/github/status", get(github::status))
         .route("/api/github/connect", get(github::connect))
+        .route("/api/github/disconnect", delete(github::disconnect))
         .route("/api/github/repositories", get(github::repositories))
         .route(
             "/api/github/repositories/:owner/:repo/branches",

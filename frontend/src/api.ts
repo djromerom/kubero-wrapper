@@ -129,6 +129,9 @@ export const api = {
     window.location.assign(authorization_url);
   },
 
+  githubDisconnect: () =>
+    request<void>('/github/disconnect', { method: 'DELETE' }),
+
   listGithubRepositories: () =>
     request<GithubRepositoriesResponse>('/github/repositories'),
 

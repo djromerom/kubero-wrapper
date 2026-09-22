@@ -84,8 +84,27 @@ pub(crate) async fn status(
     }))
 }
 
-/// Returns the installation URL as JSON so the frontend can authenticate this
-/// request with the Atlas bearer token before navigating away to GitHub.
+pub(crate) async fn disconnect(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+) -> AppResult<StatusCode> {
+    let mut transaction = state.db.begin().await?;
+
+    sqlx::query("DELETE FROM github_accounts WHERE user_id = $1")
+        .bind(auth_user.id)
+        .execute(&mut *transaction)
+        .await?;
+    sqlx::query("UPDATE users SET github_id = NULL, updated_at = NOW() WHERE id = $1")
+        .bind(auth_user.id)
+        .execute(&mut *transaction)
+        .await?;
+
+    transaction.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Starts GitHub's web application flow. Unlike the installation URL, this also
+/// returns to the callback when the GitHub App is already installed.
 pub(crate) async fn connect(
     State(state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
@@ -103,11 +122,17 @@ pub(crate) async fn connect(
         &claims,
         &EncodingKey::from_secret(state.config.jwt_secret.as_bytes()),
     )?;
+
+    let mut authorization_url = reqwest::Url::parse("https://github.com/login/oauth/authorize")
+        .map_err(|error| AppError::Internal(error.to_string()))?;
+    authorization_url
+        .query_pairs_mut()
+        .append_pair("client_id", &state.config.github_client_id)
+        .append_pair("redirect_uri", &state.config.github_callback_url)
+        .append_pair("state", &state_token);
+
     Ok(Json(json!({
-        "authorization_url": format!(
-            "https://github.com/apps/{}/installations/new?state={}",
-            state.config.github_app_slug, state_token
-        )
+        "authorization_url": authorization_url.as_str()
     })))
 }
 
@@ -202,7 +227,15 @@ pub(crate) async fn callback(
             })
     });
     if !valid_installation {
-        return Err(AppError::Forbidden);
+        let mut installation_url = reqwest::Url::parse(&format!(
+            "https://github.com/apps/{}/installations/new",
+            state.config.github_app_slug
+        ))
+        .map_err(|error| AppError::Internal(error.to_string()))?;
+        installation_url
+            .query_pairs_mut()
+            .append_pair("state", &state_token);
+        return Ok(Redirect::to(installation_url.as_str()));
     }
 
     sqlx::query(

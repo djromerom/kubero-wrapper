@@ -40,6 +40,32 @@ En la configuración de la GitHub App activa **Request user authorization (OAuth
 
 En desarrollo, `KUBERNETES_REQUIRED=false` permite iniciar la API y probar GitHub sin disponer todavía del clúster. Configúralo como `true` en los entornos donde las operaciones de infraestructura deban ser obligatorias.
 
+### Integración con Kubero (PaaS)
+
+Para la demo funcional con despliegues reales, necesitas:
+
+1. **Cluster de Kubernetes con Kubero Operator instalado**
+   - Instala el operador de Kubero siguiendo la [documentación oficial](https://kubero.dev/docs/installation)
+   - Asegúrate de que el namespace `kubero-dev` existe (o configura `KUBERO_NAMESPACE`)
+
+2. **Configuración del kubeconfig**
+   - Local: Setea `KUBE_CONFIG_PATH` a la ruta de tu kubeconfig (ej: `~/.kube/config`)
+   - In-cluster: El backend detecta automáticamente la configuración in-cluster
+   - Docker: Monta tu kubeconfig como volumen en el contenedor
+
+3. **Variables de entorno adicionales**
+   - `DOMAIN_SUFFIX`: Dominio base para las aplicaciones (default: `estudiantes.cluster.local`)
+   - `KUBERO_NAMESPACE`: Namespace donde se crean los CRDs (default: `kubero`)
+   - `REGISTRY_URL`: URL del registry de contenedores (default: `192.168.1.201:5000`)
+
+4. **Flujo de despliegue**
+   - Al crear un proyecto, el backend crea automáticamente:
+     - Un `KuberoPipeline` CRD con configuración de ingress
+     - Un `KuberoApp` CRD con la configuración del repo/branch
+   - Se dispara un build inicial mediante anotación
+   - El frontend muestra el estado real del despliegue (phase, replicas, URL)
+   - El estado se actualiza cada 10 segundos (polling)
+
 Cuando se utiliza únicamente el frontend, el botón `Vincular GitHub (demo)` reproduce el estado inicial sin vinculación y habilita los repositorios de demostración sin comunicarse con GitHub.
 
 ## Documentación

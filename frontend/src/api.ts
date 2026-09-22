@@ -78,6 +78,27 @@ export interface ClusterStatus {
   memory_usage: number;
 }
 
+export interface DeploymentStatus {
+  project_id: string;
+  project_name: string;
+  slug: string;
+  domain: string | null;
+  kubero_status: {
+    name: string;
+    namespace: string;
+    status: {
+      phase: string;
+      conditions: any[];
+      replicas: number;
+      availableReplicas: number;
+      updatedReplicas: number;
+      url: string | null;
+    };
+    ingress: any;
+  } | null;
+  message?: string;
+}
+
 export interface GithubRepository {
   id: number;
   name: string;
@@ -144,4 +165,7 @@ export const api = {
     request<void>(`/admin/projects/${id}`, { method: 'DELETE' }),
 
   clusterStatus: () => request<ClusterStatus>('/admin/cluster'),
+
+  getDeploymentStatus: (id: string) =>
+    request<DeploymentStatus>(`/projects/${id}/deployment-status`),
 };

@@ -88,7 +88,8 @@ try {
     } while ((Get-Date) -lt $deadline)
     if ($phase -ne 'Active') { throw 'Kubero no creó el namespace atlas-production.' }
 
-    $domain = "$slug.127.0.0.1.sslip.io"
+    $domainLabel = if ($slug -match '\d$') { "$slug.app" } else { $slug }
+    $domain = "$domainLabel.127.0.0.1.sslip.io"
     $app = @{
         apiVersion = 'application.kubero.dev/v1alpha1'; kind = 'KuberoApp'
         metadata = @{ name = $slug; namespace = 'atlas-production' }

@@ -205,7 +205,13 @@ async fn create_project(
         let suffix = if sequence == 1 { String::new() } else { format!("-{sequence}") };
         let prefix = base_slug.chars().take(49 - suffix.len()).collect::<String>();
         let slug = format!("{}{}", prefix.trim_end_matches('-'), suffix);
-        let domain = format!("{}.{}", slug, state.config.domain_suffix);
+        // sslip.io can interpret a trailing digit in the slug as the first IP octet.
+        // A separator label keeps 127.0.0.1 unambiguous for names such as "venezuela-2".
+        let domain = if slug.chars().last().is_some_and(|c| c.is_ascii_digit()) {
+            format!("{}.app.{}", slug, state.config.domain_suffix)
+        } else {
+            format!("{}.{}", slug, state.config.domain_suffix)
+        };
         let project = sqlx::query_as::<_, Project>(
             "INSERT INTO projects (id, user_id, name, slug, repo_url, branch, domain, webhook_secret) \
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (slug) DO NOTHING \

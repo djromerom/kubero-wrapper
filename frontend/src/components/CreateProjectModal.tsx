@@ -1,17 +1,27 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, type GithubRepository } from '../api';
 import { branchesFor, commits, repositories, submitDemoProject, type ProjectDraft } from '../demoProjects';
-import { getDemoUser, isDemoGithubLinked, linkDemoGithub } from '../demoSession';
+import { getDemoUser, isDemoGithubLinked, linkDemoGithub, unlinkDemoGithub } from '../demoSession';
+import GithubButton from './GithubButton';
+import CustomSelect from './CustomSelect';
+import { IconChevronRight } from '@tabler/icons-react';
+import { useAuth } from '../AuthContext';
 
 interface Props { open: boolean; onClose: () => void; onCreated: () => void }
-const initial: ProjectDraft = { name: '', repo: '', branch: '', commit: '', purpose: '', academic: false, course: '', type: 'Aplicación web', port: 3000, build: 'Detectar automáticamente' };
-const field = 'mt-2 w-full rounded-lg border border-atlas-mist bg-atlas-mist px-3 py-2.5 text-sm disabled:opacity-50';
+const initial: ProjectDraft = { name: '', repo: '', branch: '', commit: '', purpose: '', academic: false, course: '', port: 3000, build: 'Detectar automáticamente' };
+const courseOptions = [
+  { value: '', label: 'No pertenece a ninguna clase' },
+  ...['Diseño Web II', 'Ingeniería de Software', 'Bases de Datos'].map(course => ({ value: course, label: course })),
+];
 
 export default function CreateProjectModal({ open, onClose, onCreated }: Props) {
+  const { user } = useAuth();
   const dialog = useRef<HTMLDialogElement>(null);
+  const continueButton = useRef<HTMLButtonElement>(null);
   const [step, setStep] = useState(1);
   const [draft, setDraft] = useState<ProjectDraft>({ ...initial });
   const [error, setError] = useState('');
+  const [confirmClose, setConfirmClose] = useState(false);
   const [sending, setSending] = useState(false);
   const [githubLinked, setGithubLinked] = useState<boolean | null>(null);
   const [githubLogin, setGithubLogin] = useState('');
@@ -19,6 +29,10 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
   const [realRepositories, setRealRepositories] = useState<GithubRepository[]>([]);
   const [realBranches, setRealBranches] = useState<string[]>([]);
   const demo = Boolean(getDemoUser());
+
+  useEffect(() => {
+    if (confirmClose) continueButton.current?.focus();
+  }, [confirmClose]);
 
   const update = <K extends keyof ProjectDraft>(key: K, value: ProjectDraft[K]) => setDraft(current => ({ ...current, [key]: value }));
 
@@ -43,6 +57,7 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
     setStep(1);
     setDraft({ ...initial });
     setError('');
+    setConfirmClose(false);
     setSending(false);
     setRealRepositories([]);
     setRealBranches([]);
@@ -84,6 +99,25 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
     }
   }
 
+  async function disconnectGithub() {
+    if (!window.confirm('¿Quieres desvincular tu cuenta de GitHub de Atlas?')) return;
+    setError('');
+    setLoadingGithub(true);
+    try {
+      if (demo) unlinkDemoGithub();
+      else await api.githubDisconnect();
+      setGithubLinked(false);
+      setGithubLogin('');
+      setRealRepositories([]);
+      setRealBranches([]);
+      setDraft(current => ({ ...current, repo: '', branch: '', commit: '' }));
+    } catch (cause) {
+      setError((cause as Error).message);
+    } finally {
+      setLoadingGithub(false);
+    }
+  }
+
   async function selectRepository(fullName: string) {
     setError('');
     if (demo) {
@@ -114,9 +148,24 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
     setDraft(current => ({ ...current, branch, commit: demo && branch ? commits[0].sha : '' }));
   }
 
+  function requestClose() {
+    if (sending) return;
+    if (JSON.stringify(draft) !== JSON.stringify(initial)) setConfirmClose(true);
+    else onClose();
+  }
+
   async function next(event: React.FormEvent) {
     event.preventDefault();
     setError('');
+    const projectName = draft.name.trim();
+    if (step === 1 && (projectName.length < 3 || projectName.length > 50 || !/^[\p{L}\p{N}]+(?:[ -][\p{L}\p{N}]+)*$/u.test(projectName))) {
+      setError('El nombre debe tener entre 3 y 50 caracteres. Usa letras, números, espacios o guiones; comienza y termina con una letra o un número.');
+      return;
+    }
+    if (step === 1 && (!draft.repo || !draft.branch)) {
+      setError('Selecciona un repositorio y una rama.');
+      return;
+    }
     if (step === 1 && !draft.purpose.trim()) {
       setError('Explica el propósito funcional del proyecto.');
       return;
@@ -128,9 +177,9 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
     setSending(true);
     try {
       if (demo) {
-        submitDemoProject({ ...draft, purpose: draft.purpose.trim() });
+        submitDemoProject({ ...draft, name: projectName, purpose: draft.purpose.trim() });
       } else {
-        await api.createProject({ name: draft.name, repo_url: `https://github.com/${draft.repo}`, branch: draft.branch });
+        await api.createProject({ name: projectName, repo_url: `https://github.com/${draft.repo}`, branch: draft.branch });
       }
       onCreated();
       onClose();
@@ -146,39 +195,76 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
     : realRepositories.map(repository => ({ id: repository.id, full_name: repository.full_name }));
   const availableBranches = demo ? branchesFor(draft.repo) : realBranches;
 
-  return <dialog ref={dialog} onCancel={onClose} aria-labelledby="create-title" className="m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-4xl overflow-y-auto rounded-2xl bg-white p-0 text-atlas-ink backdrop:bg-black/50">
-    <form onSubmit={next}>
-      <header className="px-6 pt-6"><h2 id="create-title" className="text-2xl font-semibold">Nuevo proyecto</h2><p className="mt-2 text-sm text-atlas-muted">Registra tu aplicación y envíala a revisión antes del despliegue.</p></header>
-      <ol className="flex gap-3 border-b border-atlas-mist px-6 py-5" aria-label="Pasos de registro">{['Información', 'Despliegue', 'Confirmar'].map((label, index) => <li key={label} aria-current={step === index + 1 ? 'step' : undefined} className={`flex flex-1 flex-wrap items-center gap-2 text-xs ${step === index + 1 ? 'font-semibold text-atlas-red' : 'text-atlas-muted'}`}><span className={`grid h-7 w-7 place-items-center rounded-full ${step >= index + 1 ? 'bg-atlas-red text-white' : 'bg-atlas-mist'}`}>{step > index + 1 ? '✓' : index + 1}</span>{label}</li>)}</ol>
+  return <dialog
+    ref={dialog}
+    onCancel={event => { event.preventDefault(); if (confirmClose) setConfirmClose(false); else requestClose(); }}
+    onClick={event => {
+      if (event.target !== dialog.current || confirmClose) return;
+      const bounds = event.currentTarget.getBoundingClientRect();
+      if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) requestClose();
+    }}
+    aria-labelledby="create-title"
+    className="m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-xl overflow-y-auto rounded-2xl bg-white p-0 text-atlas-ink backdrop:bg-black/50"
+  >
+    <form onSubmit={next} inert={confirmClose}>
+      <header className="px-6 pt-6"><h2 id="create-title" className="text-2xl font-semibold">Nuevo proyecto</h2><p className="text-sm text-atlas-muted">{demo ? 'Registra tu aplicación y envíala a revisión antes del despliegue.' : 'Registra tu repositorio y consulta el estado de su despliegue.'}</p></header>
+      <ol className="project-steps border-b border-atlas-mist px-6 py-5" aria-label="Pasos de registro">{['Información', 'Despliegue', 'Confirmar'].map((label, index) => <li key={label} aria-current={step === index + 1 ? 'step' : undefined} className={`project-step ${step > index + 1 ? 'is-complete' : step === index + 1 ? 'is-active' : ''}`}><span>{index + 1}</span><span>{label}</span></li>)}</ol>
       <div className="space-y-4 px-6 py-5">
-        {step === 1 && <div className="grid gap-4 md:grid-cols-2">
-          {githubLinked !== true ? <section className="rounded-xl border border-atlas-mist bg-atlas-mist/50 p-4" aria-labelledby="github-link-title">
-            <h3 id="github-link-title" className="font-semibold">Vincula GitHub para continuar</h3>
-            <p className="mt-1 text-xs leading-relaxed text-atlas-muted">Tu cuenta comienza sin vinculación. Autoriza la GitHub App para cargar únicamente los repositorios permitidos.</p>
-            <button type="button" onClick={connectGithub} disabled={loadingGithub || githubLinked === null} className="mt-3 rounded-lg bg-atlas-ink px-4 py-2 text-sm text-white disabled:opacity-50">{loadingGithub || githubLinked === null ? 'Comprobando…' : demo ? 'Vincular GitHub (demo)' : 'Vincular GitHub'}</button>
-          </section> : <p className="self-start rounded-lg border border-atlas-mist p-3 text-xs text-atlas-muted">GitHub vinculado{githubLogin ? ` · @${githubLogin}` : ''}{demo ? ' · demostración' : ''}</p>}
+        {step === 1 && <div className="grid gap-5">
+          <GithubButton linked={githubLinked === true} login={githubLogin} disabled={loadingGithub || githubLinked === null} onClick={githubLinked ? disconnectGithub : connectGithub} />
 
-          <label className="block text-sm">Nombre del proyecto<input autoFocus className={field} value={draft.name} onChange={event => update('name', event.target.value)} required pattern="[a-z0-9]+(-[a-z0-9]+)*" maxLength={63} placeholder="recomendador-libros"/><span className="mt-1 block text-xs text-atlas-muted">Solo minúsculas, números y guiones.</span></label>
+          <label className="atlas-field"><span className="atlas-field-label">Nombre</span><input autoFocus className="atlas-control" value={draft.name} onChange={event => update('name', event.target.value)} required minLength={3} maxLength={50} placeholder="Mi portafolio"/></label>
 
           {githubLinked === true && <>
-            <label className="block text-sm">Repositorio de GitHub<select className={field} required value={draft.repo} disabled={loadingGithub} onChange={event => void selectRepository(event.target.value)}><option value="">Selecciona un repositorio</option>{availableRepositories.map(repository => <option key={repository.id} value={repository.full_name}>{repository.full_name}</option>)}</select></label>
-            <label className="block text-sm">Rama<select className={field} required disabled={!draft.repo || loadingGithub} value={draft.branch} onChange={event => selectBranch(event.target.value)}>{!draft.repo ? <option value="">Selecciona primero un repositorio</option> : loadingGithub ? <option value="">Cargando ramas…</option> : !availableBranches.length ? <option value="">No hay ramas disponibles</option> : availableBranches.map(branch => <option key={branch}>{branch}</option>)}</select><span className="mt-1 block text-xs text-atlas-muted">Se utilizará automáticamente el último commit de la rama.</span></label>
+            <CustomSelect label="Repositorio" value={draft.repo} disabled={loadingGithub} onChange={value => void selectRepository(value)} options={[{ value: '', label: 'Selecciona un repositorio' }, ...availableRepositories.map(repository => ({ value: repository.full_name, label: repository.full_name }))]} />
+            <CustomSelect label="Rama" value={draft.branch} disabled={!draft.repo || loadingGithub} onChange={selectBranch} options={!draft.repo ? [{ value: '', label: 'Selecciona primero un repositorio' }] : loadingGithub ? [{ value: '', label: 'Cargando ramas…' }] : !availableBranches.length ? [{ value: '', label: 'No hay ramas disponibles' }] : availableBranches.map(branch => ({ value: branch, label: branch }))} />
           </>}
 
-          <label className="block text-sm md:col-span-2">Propósito funcional<textarea className={field} rows={3} required value={draft.purpose} onChange={event => update('purpose', event.target.value)} placeholder="Explica qué hace la aplicación y para qué se utilizará."/></label>
-          <label className="flex items-center justify-between gap-4 text-sm md:col-span-2"><span>¿Pertenece a una clase?<small className="mt-1 block text-atlas-muted">Actívalo si fue realizado para una asignatura.</small></span><input type="checkbox" className="h-5 w-5 accent-atlas-red" checked={draft.academic} onChange={event => setDraft({ ...draft, academic: event.target.checked, course: '' })}/></label>
-          {draft.academic && <label className="block text-sm md:col-span-2">Clase / curso asociado<select required className={field} value={draft.course} onChange={event => update('course', event.target.value)}><option value="">Selecciona una asignatura</option>{['Diseño Web II', 'Ingeniería de Software', 'Bases de Datos'].map(course => <option key={course}>{course}</option>)}</select></label>}
+          <label className="atlas-field"><span className="atlas-field-label">Descripción</span><textarea className="atlas-control" rows={2} required value={draft.purpose} onChange={event => update('purpose', event.target.value)} placeholder="Explica qué hace la aplicación y para qué se utilizará"/></label>
+          <CustomSelect label="Curso" value={draft.course} options={courseOptions} onChange={value => setDraft(current => ({ ...current, course: value, academic: value !== '' }))} />
         </div>}
         {step === 2 && <>
           <p className="text-sm text-atlas-muted">Define una configuración inicial de despliegue.</p>
-          <fieldset><legend className="mb-2 text-sm">Tipo de proyecto</legend><div className="grid gap-3 sm:grid-cols-2">{['Aplicación web', 'API / backend'].map(type => <label key={type} className={`rounded-lg border p-4 text-sm ${draft.type === type ? 'border-atlas-red' : 'border-atlas-mist'}`}><input type="radio" name="project-type" value={type} checked={draft.type === type} onChange={() => update('type', type)} className="mr-2 accent-atlas-red"/>{type}<small className="mt-2 block text-atlas-muted">{type === 'Aplicación web' ? 'Servicio HTTP accesible mediante una URL.' : 'Endpoints para otros clientes.'}</small></label>)}</div></fieldset>
-          <label className="block text-sm">Puerto de la aplicación<input type="number" required min={1} max={65535} step={1} className={field} value={draft.port || ''} onChange={event => update('port', Number(event.target.value))}/><span className="mt-1 block text-xs text-atlas-muted">Puerto interno del contenedor, no el puerto público de la URL.</span></label>
-          <label className="block text-sm">Configuración de build<select className={field} value={draft.build} onChange={event => update('build', event.target.value)}>{['Detectar automáticamente', 'Dockerfile', 'Configuración personalizada'].map(build => <option key={build}>{build}</option>)}</select></label>
+          <label className="atlas-field"><span className="atlas-field-label">Puerto de la aplicación</span><input type="number" required min={1} max={65535} step={1} className="atlas-control" value={draft.port || ''} onChange={event => update('port', Number(event.target.value))}/><span className="atlas-field-helper">Puerto interno del contenedor, no el puerto público de la URL.</span></label>
+          <CustomSelect label="Configuración de build" value={draft.build} onChange={value => update('build', value)} options={['Detectar automáticamente', 'Dockerfile', 'Configuración personalizada'].map(build => ({ value: build, label: build }))} />
         </>}
-        {step === 3 && <><p className="rounded-lg bg-atlas-mist p-3 text-sm">Revisa antes de enviar. El proyecto quedará en <strong>Validación pendiente</strong>. Tras la aprobación comenzará el proceso de build y despliegue.</p><dl className="divide-y divide-atlas-mist text-sm">{Object.entries({ Nombre: draft.name, 'Propósito funcional': draft.purpose, Clase: draft.academic ? draft.course : 'No pertenece a una clase', Responsable: getDemoUser()?.name || 'Usuario actual', Repositorio: draft.repo, Rama: draft.branch, Commit: 'Último de la rama (automático)', Tipo: draft.type, Puerto: draft.port, Build: draft.build }).map(([label, value]) => <div key={label} className="grid gap-1 py-3 sm:grid-cols-[140px_1fr]"><dt className="text-atlas-muted">{label}</dt><dd className="break-all font-medium">{value}</dd></div>)}</dl></>}
+        {step === 3 && (
+          <dl className="divide-y divide-atlas-mist text-sm">
+            {Object.entries({
+              Nombre: draft.name,
+              Descripción: draft.purpose,
+              Repositorio: draft.repo,
+              Rama: draft.branch,
+              Curso: draft.academic ? draft.course : 'No pertenece',
+              Responsable: user?.name || 'Sin nombre',
+              Despliegue: `Puerto ${draft.port} - Build en ${draft.build}`,
+            }).map(([label, value]) => (
+              <div key={label} className="grid gap-1 py-3 sm:grid-cols-[140px_minmax(0,1fr)]">
+                <dt className="text-xs text-atlas-muted">{label}</dt>
+                <dd className="min-w-0 break-words font-medium">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
         {error && <p role="alert" className="text-sm text-atlas-red">{error}</p>}
       </div>
-      <footer className="sticky bottom-0 flex justify-between gap-3 border-t border-atlas-mist bg-white px-6 py-4"><button type="button" onClick={() => { setError(''); if (step === 1) onClose(); else setStep(step - 1); }} className="rounded-lg px-4 py-2 text-sm hover:bg-atlas-mist">{step === 1 ? 'Cancelar' : 'Atrás'}</button><button disabled={sending || githubLinked !== true || loadingGithub} className="rounded-lg bg-atlas-red px-4 py-2 text-sm text-white hover:bg-atlas-ink disabled:opacity-50">{sending ? 'Enviando…' : step === 3 ? 'Enviar a aprobación' : 'Siguiente'}</button></footer>
+      <footer className="flex items-center justify-end gap-3 border-t border-atlas-mist bg-white px-6 py-4">
+        {step > 1 && <button type="button" onClick={() => { setError(''); setStep(step - 1); }} className="mr-auto rounded-lg px-4 py-2 text-sm hover:bg-atlas-mist">Atrás</button>}
+        <button type="submit" disabled={sending || githubLinked !== true || loadingGithub} className="inline-flex items-center gap-2 rounded-lg bg-atlas-red px-4 py-2 text-sm text-white hover:bg-atlas-ink disabled:opacity-50">
+          {sending ? 'Creando…' : step === 3 ? (demo ? 'Enviar a aprobación' : 'Crear proyecto') : 'Siguiente'}
+          {step < 3 && <IconChevronRight size={16} stroke={2} aria-hidden="true" />}
+        </button>
+      </footer>
     </form>
+    {confirmClose && <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4" role="presentation">
+      <section role="alertdialog" aria-modal="true" aria-labelledby="discard-title" aria-describedby="discard-description" className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+        <h3 id="discard-title" className="text-lg font-semibold">¿Cerrar el nuevo proyecto?</h3>
+        <p id="discard-description" className="mt-2 text-sm text-atlas-muted">Se perderán los datos que ingresaste en este formulario.</p>
+        <div className="mt-6 flex flex-wrap justify-end gap-2">
+          <button ref={continueButton} type="button" onClick={() => setConfirmClose(false)} className="px-2 text-sm font-medium hover:bg-atlas-mist">Continuar creando</button>
+          <button type="button" onClick={() => { setConfirmClose(false); onClose(); }} className="rounded-lg bg-atlas-red px-4 py-2 text-sm font-medium text-white hover:bg-atlas-ink">Cerrar proyecto</button>
+        </div>
+      </section>
+    </div>}
   </dialog>;
 }

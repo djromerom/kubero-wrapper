@@ -9,6 +9,7 @@ import DashboardPage from './pages/DashboardPage';
 import ProjectDetailPage from './pages/ProjectDetailPage';
 import AdminPage from './pages/AdminPage';
 import Layout from './components/Layout';
+import ToastProvider from './components/ToastProvider';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { token, user, loading } = useAuth();
@@ -28,6 +29,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <ToastProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
@@ -38,6 +40,7 @@ export default function App() {
           </Route>
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
+        </ToastProvider>
       </AuthProvider>
     </BrowserRouter>
   );

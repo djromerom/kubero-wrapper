@@ -83,6 +83,7 @@ export interface DeploymentStatus {
   project_name: string;
   slug: string;
   domain: string | null;
+  cluster_configured: boolean;
   kubero_status: {
     name: string;
     namespace: string;
@@ -127,9 +128,9 @@ export const api = {
   login: (data: { email: string; password: string }) =>
     request<AuthResponse>('/auth/login', { method: 'POST', body: JSON.stringify(data) }),
 
-  listProjects: () => request<Project[]>('/projects'),
+  listProjects: () => request<Project[]>('/projects', { cache: 'no-store' }),
 
-  getProject: (id: string) => request<Project>(`/projects/${id}`),
+  getProject: (id: string) => request<Project>(`/projects/${id}`, { cache: 'no-store' }),
 
   createProject: (data: { name: string; repo_url: string; branch?: string }) =>
     request<Project>('/projects', { method: 'POST', body: JSON.stringify(data) }),
@@ -138,7 +139,7 @@ export const api = {
     request<void>(`/projects/${id}`, { method: 'DELETE' }),
 
   listBuilds: (projectId: string) =>
-    request<Build[]>(`/projects/${projectId}/builds`),
+    request<Build[]>(`/projects/${projectId}/builds`, { cache: 'no-store' }),
 
   getWebhook: (id: string) =>
     request<{ webhook_url: string; webhook_secret: string }>(`/projects/${id}/webhook`),

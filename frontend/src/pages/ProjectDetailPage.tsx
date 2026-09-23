@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api, type Project, type Build, type DeploymentStatus } from '../api';
 import StatusBadge from '../components/StatusBadge';
+import { IconExternalLink } from '@tabler/icons-react';
 
 export default function ProjectDetailPage() { return getDemoUser() ? <DemoProjectDetailPage /> : <RealProjectDetailPage />; }
 function RealProjectDetailPage() {
@@ -50,6 +51,34 @@ function RealProjectDetailPage() {
   useEffect(() => { load(); }, [load]);
   useEffect(() => { loadDeploymentStatus(); }, [loadDeploymentStatus]);
 
+  useEffect(() => {
+    if (!id) return;
+    let active = true;
+    let refreshing = false;
+    const refreshProject = async () => {
+      if (document.hidden || refreshing) return;
+      refreshing = true;
+      try {
+        const [updatedProject, updatedBuilds] = await Promise.all([api.getProject(id), api.listBuilds(id)]);
+        if (active) {
+          setProject(updatedProject);
+          setBuilds(updatedBuilds);
+        }
+      } catch {
+        // Keep the last available project state and try again on the next poll.
+      } finally {
+        refreshing = false;
+      }
+    };
+    const interval = window.setInterval(() => { void refreshProject(); }, 5000);
+    document.addEventListener('visibilitychange', refreshProject);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', refreshProject);
+    };
+  }, [id]);
+
   // Poll deployment status every 10 seconds
   useEffect(() => {
     const interval = setInterval(() => {
@@ -80,13 +109,24 @@ function RealProjectDetailPage() {
         </div>
       </div>
 
-      {deploymentStatus?.kubero_status && (
+      <section className="mb-6 rounded-lg bg-white p-4">
+        <h2 className="mb-3 font-semibold">Información del proyecto</h2>
+        <dl className="text-sm">
+          <div><dt className="text-atlas-muted">Proyecto creado</dt><dd className="mt-1">{new Date(project.created_at).toLocaleDateString('es-CO')}</dd></div>
+        </dl>
+      </section>
+
+      {deploymentStatus && (
         <div className="bg-white rounded-lg p-4 mb-6">
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-semibold">Estado del despliegue (Kubero)</h3>
             {loadingDeployment && <span className="text-xs text-atlas-muted">Actualizando...</span>}
           </div>
-          <div className="space-y-2 text-sm">
+          {!deploymentStatus.kubero_status ? (
+            <p className="text-sm text-atlas-muted">El despliegue de este proyecto aún no está disponible.</p>
+          ) : project.status === 'running' && !deploymentStatus.kubero_status.status.phase ? (
+            <p className="text-sm text-atlas-muted">La aplicación está publicada y respondió correctamente por su dominio local.</p>
+          ) : <div className="space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-atlas-muted">Fase:</span>
               <span className="font-medium">{deploymentStatus.kubero_status.status.phase}</span>
@@ -95,25 +135,24 @@ function RealProjectDetailPage() {
               <span className="text-atlas-muted">Replicas:</span>
               <span className="font-medium">{deploymentStatus.kubero_status.status.availableReplicas} / {deploymentStatus.kubero_status.status.replicas}</span>
             </div>
-            {deploymentStatus.kubero_status.status.url && (
+            {deploymentStatus.kubero_status.status.url && deploymentStatus.kubero_status.status.availableReplicas > 0 && (
               <div className="mt-3 pt-3 border-t border-atlas-mist">
                 <span className="text-atlas-muted block mb-1">URL de la aplicación:</span>
-                <a href={deploymentStatus.kubero_status.status.url} target="_blank" rel="noreferrer"
-                   className="text-atlas-red hover:underline break-all">
-                  {deploymentStatus.kubero_status.status.url}
+                <a href={deploymentStatus.kubero_status.status.url} target="_blank" rel="noopener noreferrer"
+                   className="inline-flex items-center gap-1 break-all text-atlas-red hover:underline">
+                  <span>{deploymentStatus.kubero_status.status.url}</span><IconExternalLink size={16} stroke={1.8} aria-hidden="true" className="shrink-0" />
                 </a>
               </div>
             )}
-          </div>
+          </div>}
         </div>
       )}
 
-      {project.domain && (
+      {project.status === 'running' && project.domain && (
         <div className="bg-white rounded-lg p-4 mb-6">
-          <p className="text-sm text-atlas-muted">Disponible en:</p>
-          <a href={`https://${project.domain}`} target="_blank" rel="noreferrer"
-             className="text-atlas-red hover:underline">
-            {project.domain}
+          <p className="text-sm text-atlas-muted">Aplicación disponible:</p>
+          <a href={`http://${project.domain}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 break-all text-atlas-red hover:underline">
+            <span>{`http://${project.domain}`}</span><IconExternalLink size={16} stroke={1.8} aria-hidden="true" className="shrink-0" />
           </a>
         </div>
       )}
@@ -131,7 +170,7 @@ function RealProjectDetailPage() {
       <div className="bg-white rounded-lg p-4">
         <h3 className="font-semibold mb-4">Builds</h3>
         {builds.length === 0 ? (
-          <p className="text-atlas-muted text-sm">Todavía no hay ejecuciones. Envía cambios al repositorio para iniciar una.</p>
+          <p className="text-atlas-muted text-sm">Todavía no hay ejecuciones de build.</p>
         ) : (
           <div className="space-y-3">
             {builds.map(b => (

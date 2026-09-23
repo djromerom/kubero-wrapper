@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
+import { IconLayoutGrid } from '@tabler/icons-react';
 
 export default function LoginPage() {
   const [mode, setMode] = useState<'initial' | 'demo' | 'local'>('initial');
@@ -34,7 +35,7 @@ export default function LoginPage() {
 
     {mode === 'initial' && <div className="space-y-3">
       <button type="button" onClick={() => setMode('demo')} className="flex w-full items-center justify-center gap-3 rounded-lg bg-atlas-red px-4 py-3 font-medium text-white hover:bg-atlas-ink">
-        <svg viewBox="0 0 20 20" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M0 0h9v9H0zM11 0h9v9h-9zM0 11h9v9H0zM11 11h9v9h-9z" /></svg>
+        <IconLayoutGrid size={20} stroke={2} aria-hidden="true" />
         Entrar en demostración
       </button>
       <button type="button" onClick={() => setMode('local')} className="w-full rounded-lg border border-atlas-mist px-4 py-3 font-medium hover:border-atlas-red hover:bg-atlas-mist">Usar backend local</button>
@@ -55,8 +56,8 @@ export default function LoginPage() {
     {mode === 'local' && <section aria-labelledby="local-title">
       <h3 id="local-title" className="mb-4 font-semibold">Acceso mediante el backend local</h3>
       <form onSubmit={submitLocal} className="space-y-4">
-        <label className="block text-sm">Correo electrónico<input type="email" autoComplete="email" required value={email} onChange={event => setEmail(event.target.value)} className="mt-2 w-full rounded-lg bg-atlas-mist px-3 py-2.5"/></label>
-        <label className="block text-sm">Contraseña<input type="password" autoComplete="current-password" required value={password} onChange={event => setPassword(event.target.value)} className="mt-2 w-full rounded-lg bg-atlas-mist px-3 py-2.5"/></label>
+        <label className="atlas-field"><span className="atlas-field-label">Correo electrónico</span><input type="email" autoComplete="email" required value={email} onChange={event => setEmail(event.target.value)} className="atlas-control"/></label>
+        <label className="atlas-field"><span className="atlas-field-label">Contraseña</span><input type="password" autoComplete="current-password" required value={password} onChange={event => setPassword(event.target.value)} className="atlas-control"/></label>
         {error && <p role="alert" className="text-sm text-atlas-red">{error}</p>}
         <button disabled={loading} className="w-full rounded-lg bg-atlas-red px-4 py-3 font-medium text-white hover:bg-atlas-ink disabled:opacity-50">{loading ? 'Iniciando…' : 'Iniciar sesión'}</button>
       </form>

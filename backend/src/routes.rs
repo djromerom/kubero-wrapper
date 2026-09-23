@@ -7,6 +7,7 @@ use axum::{
     Extension, Json, Router,
 };
 use serde_json::json;
+use unicode_normalization::{char::is_combining_mark, UnicodeNormalization};
 use uuid::Uuid;
 
 use crate::{
@@ -164,6 +165,32 @@ async fn create_project(
     Extension(auth_user): Extension<AuthUser>,
     Json(req): Json<CreateProjectRequest>,
 ) -> AppResult<(StatusCode, Json<ProjectResponse>)> {
+    let name = req.name.trim();
+    let mut previous_separator = false;
+    let valid_name = name.chars().count() >= 3
+        && name.chars().count() <= 50
+        && name.chars().next().is_some_and(char::is_alphanumeric)
+        && name.chars().all(|c| {
+            if c == ' ' || c == '-' {
+                if previous_separator { return false; }
+                previous_separator = true;
+                true
+            } else if c.is_alphanumeric() {
+                previous_separator = false;
+                true
+            } else {
+                false
+            }
+        })
+        && !previous_separator;
+    if !valid_name {
+        return Err(AppError::BadRequest("El nombre debe tener entre 3 y 50 caracteres y usar letras, números, espacios o guiones.".into()));
+    }
+    let base_slug = slugify(name);
+    if base_slug.len() < 3 {
+        return Err(AppError::BadRequest("El nombre no permite generar una URL válida. Usa letras latinas o números.".into()));
+    }
+    let project_id = Uuid::new_v4();
     let (commit_sha, commit_message) = github::validate_project_source(
         &state,
         auth_user.id,
@@ -171,28 +198,41 @@ async fn create_project(
         &req.branch,
     )
     .await?;
-    let slug = slugify(&req.name);
     let webhook_secret = uuid::Uuid::new_v4().to_string();
-    let domain = format!("{}.{}", slug, state.config.domain_suffix);
-
-    let project = sqlx::query_as::<_, Project>(
-        "INSERT INTO projects (user_id, name, slug, repo_url, branch, domain, webhook_secret) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7) \
-         RETURNING id, user_id, name, slug, repo_url, branch, status::text AS status, \
-         domain, webhook_secret, kubero_pipeline, kubero_app, created_at, updated_at",
-    )
-    .bind(auth_user.id)
-    .bind(&req.name)
-    .bind(&slug)
-    .bind(&req.repo_url)
-    .bind(&req.branch)
-    .bind(&domain)
-    .bind(&webhook_secret)
-    .fetch_one(&state.db)
-    .await?;
+    let mut created = None;
+    for sequence in 1..=1000 {
+        // Kubero appends "-kuberoapp-web" to the name, so keep its DNS label under 63 characters.
+        let suffix = if sequence == 1 { String::new() } else { format!("-{sequence}") };
+        let prefix = base_slug.chars().take(49 - suffix.len()).collect::<String>();
+        let slug = format!("{}{}", prefix.trim_end_matches('-'), suffix);
+        let domain = format!("{}.{}", slug, state.config.domain_suffix);
+        let project = sqlx::query_as::<_, Project>(
+            "INSERT INTO projects (id, user_id, name, slug, repo_url, branch, domain, webhook_secret) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (slug) DO NOTHING \
+             RETURNING id, user_id, name, slug, repo_url, branch, status::text AS status, \
+             domain, webhook_secret, kubero_pipeline, kubero_app, created_at, updated_at",
+        )
+        .bind(project_id)
+        .bind(auth_user.id)
+        .bind(name)
+        .bind(&slug)
+        .bind(&req.repo_url)
+        .bind(&req.branch)
+        .bind(&domain)
+        .bind(&webhook_secret)
+        .fetch_optional(&state.db)
+        .await?;
+        if let Some(project) = project {
+            created = Some((project, slug, domain));
+            break;
+        }
+    }
+    let (project, slug, domain) = created.ok_or_else(|| {
+        AppError::Conflict("No se pudo reservar una dirección para este proyecto.".into())
+    })?;
 
     // Create Kubero CRDs if Kubernetes is configured
-    if let Some(kubero) = &state.kubero {
+    if let Some(kubero) = state.kubero.as_ref().filter(|_| !state.config.local_image_deployment) {
         let namespace = &state.config.kubero_namespace;
         let pipeline_name = kubero.create_pipeline_crd(
             namespace,
@@ -397,6 +437,7 @@ async fn get_deployment_status(
                 "project_name": project.name,
                 "slug": project.slug,
                 "domain": project.domain,
+                "cluster_configured": true,
                 "kubero_status": status,
             })));
         }
@@ -407,9 +448,10 @@ async fn get_deployment_status(
         "project_id": project.id,
         "project_name": project.name,
         "slug": project.slug,
-        "domain": project.domain,
+        "domain": null,
+        "cluster_configured": state.kubero.is_some(),
         "kubero_status": null,
-        "message": "Kubernetes not configured or deployment not yet created",
+        "message": if state.kubero.is_some() { "Kubero application not yet created" } else { "Kubernetes is not configured" },
     })))
 }
 
@@ -516,10 +558,15 @@ async fn ws_handler(
 }
 
 fn slugify(name: &str) -> String {
-    name.to_lowercase()
-        .chars()
-        .map(|c| if c.is_alphanumeric() { c } else { '-' })
-        .collect::<String>()
-        .trim_matches('-')
-        .to_string()
+    let mut slug = String::new();
+    for c in name.nfd() {
+        if c.is_ascii_alphanumeric() {
+            slug.push(c.to_ascii_lowercase());
+        } else if is_combining_mark(c) {
+            continue;
+        } else if (c == ' ' || c == '-') && !slug.is_empty() && !slug.ends_with('-') {
+            slug.push('-');
+        }
+    }
+    slug.trim_end_matches('-').to_string()
 }

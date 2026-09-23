@@ -1,8 +1,25 @@
+import { IconExternalLink } from '@tabler/icons-react';
 import { Link } from 'react-router-dom';
 import type { Project } from '../api';
 import type { DemoProject } from '../demoProjects';
+import { getDemoUser } from '../demoSession';
 import StatusBadge from './StatusBadge';
-export default function ProjectCard({ project:p }: { project:Project }) {
- const demo=p as Partial<DemoProject>;
- return <Link to={`/projects/${p.id}`} aria-label={`Ver proyecto ${p.name}`} className="block h-full cursor-pointer rounded-xl"><article className="flex h-full flex-col rounded-xl border border-atlas-mist p-5 transition hover:border-atlas-red"><div><StatusBadge status={p.status}/></div><h3 className="mt-4 text-lg font-semibold">{p.name}</h3><p className="mt-2 text-xs text-atlas-muted">{demo.owner}</p><p className="mt-1 break-all text-xs text-atlas-muted">{p.repo_url.replace('https://','')}</p><p className="mt-3 break-all text-xs text-atlas-muted">{p.domain || (p.status==='retained'?'Aplicación detenida · datos retenidos':'URL aún no disponible')}</p>{demo.deletion&&<p className="mt-3 text-xs text-atlas-red">Eliminación solicitada · plazo {demo.deletion.days} días</p>}<div className="mt-5 flex justify-between gap-3 border-t border-atlas-mist pt-3 text-xs text-atlas-muted"><span>{demo.builds?.length?'Última ejecución':'Solicitud registrada'}</span><span>{demo.builds?.[0]?.status === 'building'?'En curso':new Date(demo.builds?.[0]?.created_at || p.created_at).toLocaleDateString('es-CO')}</span></div></article></Link>;
+
+export default function ProjectCard({ project }: { project: Project }) {
+  const demo = project as Partial<DemoProject>;
+  const isDemo = Boolean(getDemoUser());
+  const visibleDomain = isDemo || project.status === 'running' ? project.domain : null;
+  const appUrl = visibleDomain ? (/^https?:\/\//i.test(visibleDomain) ? visibleDomain : `http://${visibleDomain}`) : null;
+
+  return <article className="relative flex h-full flex-col rounded-xl border border-atlas-mist p-5 transition hover:border-atlas-ink">
+    <Link to={`/projects/${project.id}`} aria-label={`Ver proyecto ${project.name}`} className="absolute inset-0 rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-atlas-red" />
+    <div><StatusBadge status={project.status} /></div>
+    <h3 className="mt-4 text-lg font-semibold">{project.name}</h3>
+    {demo.owner && <p className="mt-2 text-xs text-atlas-muted">{demo.owner}</p>}
+    <p className="mt-1 break-all text-xs text-atlas-muted">{project.repo_url.replace('https://', '')}</p>
+    {appUrl ? <a href={appUrl} target="_blank" rel="noopener noreferrer" className="relative z-10 mt-3 inline-flex max-w-full items-center gap-1 text-xs text-atlas-red hover:underline focus-visible:underline" aria-label={`Abrir aplicación ${project.name} en una pestaña nueva`}>
+      <span className="min-w-0 break-all">{visibleDomain}</span><IconExternalLink size={15} stroke={1.8} aria-hidden="true" className="shrink-0" />
+    </a> : <p className="mt-3 text-xs text-atlas-muted">{project.status === 'retained' ? 'Aplicación detenida · datos retenidos' : 'URL aún no disponible'}</p>}
+    {demo.deletion && <p className="mt-3 text-xs text-atlas-red">Eliminación solicitada · plazo {demo.deletion.days} días</p>}
+  </article>;
 }

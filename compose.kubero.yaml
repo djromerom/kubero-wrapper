@@ -1,0 +1,17 @@
+services:
+  backend:
+    environment:
+      KUBE_CONFIG_PATH: /app/kubeconfig
+      KUBERNETES_REQUIRED: "true"
+      LOCAL_IMAGE_DEPLOYMENT: "true"
+      DOMAIN_SUFFIX: 127.0.0.1.sslip.io
+      KUBERO_NAMESPACE: atlas-production
+    volumes:
+      - ./.local/kubeconfig:/app/kubeconfig:ro
+    networks:
+      - default
+      - kind
+
+networks:
+  kind:
+    external: true

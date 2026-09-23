@@ -8,7 +8,7 @@ export const commits = [
   { sha: '731da20818ac4fd62e02f79bfb2304fc96a46c1a', label: 'Versión inicial funcional' },
 ];
 export function branchesFor(repo: string) { return !repo ? [] : repo.includes('portafolio') ? ['main', 'redesign'] : repo.includes('reservas') ? ['main', 'develop', 'staging'] : ['main', 'develop']; }
-export interface ProjectDraft { name: string; repo: string; branch: string; commit: string; purpose: string; academic: boolean; course: string; type: string; port: number; build: string }
+export interface ProjectDraft { name: string; repo: string; branch: string; commit: string; purpose: string; academic: boolean; course: string; port: number; build: string }
 export type DemoProject = Project & { submission: ProjectDraft; owner: string; ownerId: string; builds?: Build[]; observation?: string; retentionUntil?: string; deletion?: { reason: string; deadline: string; days: number; retention: number }; history?: { action: string; date: string; actor: string }[] };
 const KEY = 'atlas.demo.projects.shared.v2';
 function allProjects(): DemoProject[] {
@@ -41,7 +41,8 @@ export function reviewDemoProject(id:string, decision:'approve'|'corrections', t
 export function submitDemoProject(draft: ProjectDraft) {
   if (!getDemoUser()) throw new Error('La admisión real todavía no está conectada.');
   const items = allProjects();
-  if (items.some(item => item.slug === draft.name || item.submission.repo === draft.repo)) throw new Error('Ya registraste ese nombre o repositorio.');
-  const project: DemoProject = { id: crypto.randomUUID(), name: draft.name, slug: draft.name, repo_url: `https://github.com/${draft.repo}`, branch: draft.branch, status: 'pending', domain: null, webhook_url: null, created_at: new Date().toISOString(), submission: { ...draft }, owner: getDemoUser()!.name, ownerId: getDemoUser()!.id, history: [{action: 'Proyecto enviado a aprobación', date: new Date().toISOString(), actor: getDemoUser()!.name}] };
+  const slug = draft.name.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  if (items.some(item => item.slug === slug || item.submission.repo === draft.repo)) throw new Error('Ya registraste ese nombre o repositorio.');
+  const project: DemoProject = { id: crypto.randomUUID(), name: draft.name, slug, repo_url: `https://github.com/${draft.repo}`, branch: draft.branch, status: 'pending', domain: null, webhook_url: null, created_at: new Date().toISOString(), submission: { ...draft }, owner: getDemoUser()!.name, ownerId: getDemoUser()!.id, history: [{action: 'Proyecto enviado a aprobación', date: new Date().toISOString(), actor: getDemoUser()!.name}] };
   sessionStorage.setItem(KEY, JSON.stringify([project, ...items]));
 }

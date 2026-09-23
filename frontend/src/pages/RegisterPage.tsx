@@ -29,36 +29,36 @@ export default function RegisterPage() {
       <div>
         <h1 className="text-2xl font-bold text-atlas-red mb-6 text-center">Crea tu cuenta de Atlas</h1>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm text-atlas-muted mb-1" htmlFor="name">Nombre</label>
+          <label className="atlas-field">
+            <span className="atlas-field-label">Nombre</span>
             <input
               id="name" autoComplete="name" value={name}
               onChange={e => setName(e.target.value)}
-              className="w-full bg-atlas-mist rounded px-3 py-2 text-atlas-ink"
+              className="atlas-control"
               required
             />
-          </div>
-          <div>
-            <label className="block text-sm text-atlas-muted mb-1" htmlFor="email">Correo electrónico</label>
+          </label>
+          <label className="atlas-field">
+            <span className="atlas-field-label">Correo electrónico</span>
             <input
               id="email" autoComplete="email" type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
-              className="w-full bg-atlas-mist rounded px-3 py-2 text-atlas-ink"
+              className="atlas-control"
               required
             />
-          </div>
-          <div>
-            <label className="block text-sm text-atlas-muted mb-1" htmlFor="password">Contraseña</label>
+          </label>
+          <label className="atlas-field">
+            <span className="atlas-field-label">Contraseña</span>
             <input
               id="password" autoComplete="new-password" type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
-              className="w-full bg-atlas-mist rounded px-3 py-2 text-atlas-ink"
+              className="atlas-control"
               required
               minLength={6}
             />
-          </div>
+          </label>
           {error && <p className="text-atlas-red text-sm">{error}</p>}
           <button type="submit" className="w-full bg-atlas-red text-white py-2 rounded hover:bg-atlas-ink">
             Registrarse

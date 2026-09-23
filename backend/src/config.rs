@@ -8,6 +8,7 @@ pub struct Config {
     pub jwt_expiry_hours: i64,
     pub kube_config_path: String,
     pub kubernetes_required: bool,
+    pub local_image_deployment: bool,
     pub domain_suffix: String,
     pub kubero_namespace: String,
     pub registry_url: String,
@@ -37,6 +38,9 @@ impl Config {
             kube_config_path: env::var("KUBE_CONFIG_PATH")
                 .unwrap_or_else(|_| "/app/kubeconfig".into()),
             kubernetes_required: env::var("KUBERNETES_REQUIRED")
+                .map(|value| value.eq_ignore_ascii_case("true"))
+                .unwrap_or(false),
+            local_image_deployment: env::var("LOCAL_IMAGE_DEPLOYMENT")
                 .map(|value| value.eq_ignore_ascii_case("true"))
                 .unwrap_or(false),
             domain_suffix: env::var("DOMAIN_SUFFIX")

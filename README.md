@@ -40,6 +40,32 @@ En la configuración de la GitHub App activa **Request user authorization (OAuth
 
 En desarrollo, `KUBERNETES_REQUIRED=false` permite iniciar la API y probar GitHub sin disponer todavía del clúster. Configúralo como `true` en los entornos donde las operaciones de infraestructura deban ser obligatorias.
 
+### Demo local con Kind y dominio directo
+
+El laboratorio local `../kubero` instala Kind, el operador de Kubero e Ingress. Antes de crear un proyecto, abre Docker Desktop y ejecuta desde este repositorio:
+
+```powershell
+.\scripts\start-local-kubero.ps1
+```
+
+El script enciende el contenedor Kind, PostgreSQL, Redis, el backend de Atlas, el frontend y un monitor local de despliegues. Comprueba que Kubernetes, la API y la página respondan. Esta instalación utiliza `kubero-control-plane` y ejecuta el backend en Docker; no necesita `kind-registry` ni otro `cargo run`. Al terminar, abre `http://127.0.0.1:5173/`, inicia sesión, vincula GitHub en el perfil y crea un proyecto con repositorio y rama. El monitor detecta los proyectos pendientes, los reclama por UUID y despliega cada uno automáticamente. Dos usuarios pueden registrar el mismo nombre: el UUID distingue los registros durante el despliegue y la URL usa el nombre normalizado. Si esa dirección ya existe, se agrega un sufijo numérico como `mi-portafolio-2`.
+
+Para comprobar las aplicaciones existentes en Kubero:
+
+```powershell
+kubectl get kuberoapps -A
+```
+
+El monitor toma el repositorio y la rama guardados en Atlas, descarga el commit con la cuenta GitHub vinculada, construye un Dockerfile existente o genera una imagen NGINX para un sitio con `index.html`, importa la imagen en Kind y crea un `KuberoPipeline` y un `KuberoApp`. Solo después de comprobar una respuesta HTTP actualiza el proyecto a `running`. Si falla, marca el proyecto como `failed` y guarda el error en el historial de builds y en `.local/deployments/<UUID>.log`. El Ingress publica el puerto 80 de Kind, así que no se necesita `kubectl port-forward` ni mantener una terminal abierta para visitar la aplicación. El dominio `127.0.0.1.sslip.io` funciona solo desde el equipo que ejecuta Kind.
+
+Para repetir manualmente un despliegue local durante el diagnóstico, usa el UUID del proyecto:
+
+```powershell
+.\scripts\deploy-local.ps1 -ProjectId <UUID>
+```
+
+La configuración de demo usa `compose.kubero.yaml` y un kubeconfig generado en `.local/`, excluido de Git. El token de GitHub se utiliza durante la descarga y no se inserta en la imagen ni en Kubernetes. El monitor local requiere acceso a Docker y a la base de datos de desarrollo; no se debe usar en producción. El modo de imagen local evita que el flujo GitOps del backend intente construir repositorios privados sin credenciales de Kubero.
+
 ### Integración con Kubero (PaaS)
 
 Para la demo funcional con despliegues reales, necesitas:

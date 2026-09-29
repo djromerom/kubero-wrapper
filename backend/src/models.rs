@@ -87,6 +87,12 @@ pub struct CreateProjectRequest {
     pub branch: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct AdminReviewRequest {
+    pub decision: String,
+    pub text: String,
+}
+
 fn default_branch() -> String {
     "main".into()
 }

@@ -64,6 +64,7 @@ pub fn create_router(state: AppState) -> Router {
     let admin_routes = Router::new()
         .route("/api/admin/projects", get(admin_list_projects))
         .route("/api/admin/projects/:id", delete(admin_delete_project))
+        .route("/api/admin/projects/:id/review", axum::routing::patch(admin_review_project))
         .route("/api/admin/cluster", get(cluster_status))
         .route_layer(middleware::from_fn(auth::admin_middleware))
         .route_layer(middleware::from_fn_with_state(
@@ -233,68 +234,21 @@ async fn create_project(
             break;
         }
     }
-    let (project, slug, domain) = created.ok_or_else(|| {
+    let (project, _slug, _domain) = created.ok_or_else(|| {
         AppError::Conflict("No se pudo reservar una dirección para este proyecto.".into())
     })?;
 
-    // Create Kubero CRDs if Kubernetes is configured
-    if let Some(kubero) = state.kubero.as_ref().filter(|_| !state.config.local_image_deployment) {
-        let namespace = &state.config.kubero_namespace;
-        let pipeline_name = kubero.create_pipeline_crd(
-            namespace,
-            &slug,
-            &req.repo_url,
-            &req.branch,
-            &domain,
-        ).await?;
-
-        let app_name = kubero.create_app_crd(
-            namespace,
-            &slug,
-            &req.repo_url,
-            &req.branch,
-            &pipeline_name,
-            &domain,
-            &state.config.registry_url,
-        ).await?;
-
-        // Update project with Kubero resource names
-        sqlx::query(
-            "UPDATE projects SET kubero_pipeline = $1, kubero_app = $2 WHERE id = $3",
-        )
-        .bind(&pipeline_name)
-        .bind(&app_name)
-        .bind(project.id)
-        .execute(&state.db)
-        .await?;
-
-        // Trigger the initial build
-        let _ = kubero.trigger_build(namespace, &app_name).await;
-
-        state.event_bus.publish("project.created", &json!({
-            "project_id": project.id,
-            "user_id": project.user_id,
-            "slug": project.slug,
-            "repo_url": project.repo_url,
-            "branch": project.branch,
-            "domain": project.domain,
-            "commit_sha": commit_sha,
-            "commit_message": commit_message,
-            "kubero_pipeline": pipeline_name,
-            "kubero_app": app_name,
-        })).await;
-    } else {
-        state.event_bus.publish("project.created", &json!({
-            "project_id": project.id,
-            "user_id": project.user_id,
-            "slug": project.slug,
-            "repo_url": project.repo_url,
-            "branch": project.branch,
-            "domain": project.domain,
-            "commit_sha": commit_sha,
-            "commit_message": commit_message,
-        })).await;
-    }
+    // Project is created with status 'pending' - Kubernetes resources will be created after admin approval
+    state.event_bus.publish("project.created", &json!({
+        "project_id": project.id,
+        "user_id": project.user_id,
+        "slug": project.slug,
+        "repo_url": project.repo_url,
+        "branch": project.branch,
+        "domain": project.domain,
+        "commit_sha": commit_sha,
+        "commit_message": commit_message,
+    })).await;
 
     Ok((StatusCode::CREATED, Json(project.into())))
 }
@@ -545,6 +499,91 @@ async fn admin_delete_project(
     })).await;
 
     Ok(StatusCode::NO_CONTENT)
+}
+
+async fn admin_review_project(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(req): Json<AdminReviewRequest>,
+) -> AppResult<Json<ProjectResponse>> {
+    let project = sqlx::query_as::<_, Project>(
+        "SELECT id, user_id, name, slug, repo_url, branch, status::text AS status, \
+         domain, webhook_secret, kubero_pipeline, kubero_app, created_at, updated_at \
+         FROM projects WHERE id = $1 AND status != 'deleted'",
+    )
+    .bind(id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound)?;
+
+    if req.decision == "approve" {
+        if let Some(kubero) = state.kubero.as_ref() {
+            let namespace = &state.config.kubero_namespace;
+            let pipeline_name = kubero.create_pipeline_crd(
+                namespace,
+                &project.slug,
+                &project.repo_url,
+                &project.branch,
+                &project.domain.clone().unwrap_or_default(),
+            ).await?;
+
+            let app_name = kubero.create_app_crd(
+                namespace,
+                &project.slug,
+                &project.repo_url,
+                &project.branch,
+                &pipeline_name,
+                &project.domain.clone().unwrap_or_default(),
+                &state.config.registry_url,
+            ).await?;
+
+            sqlx::query(
+                "UPDATE projects SET kubero_pipeline = $1, kubero_app = $2, status = 'building' WHERE id = $3",
+            )
+            .bind(&pipeline_name)
+            .bind(&app_name)
+            .bind(project.id)
+            .execute(&state.db)
+            .await?;
+
+            let _ = kubero.trigger_build(namespace, &app_name).await;
+
+            state.event_bus.publish("project.approved", &json!({
+                "project_id": project.id,
+                "user_id": project.user_id,
+                "slug": project.slug,
+                "kubero_pipeline": pipeline_name,
+                "kubero_app": app_name,
+            })).await;
+        } else {
+            return Err(AppError::Internal("Kubernetes is not configured".into()));
+        }
+    } else if req.decision == "corrections" {
+        sqlx::query("UPDATE projects SET status = 'failed' WHERE id = $1")
+            .bind(project.id)
+            .execute(&state.db)
+            .await?;
+
+        state.event_bus.publish("project.rejected", &json!({
+            "project_id": project.id,
+            "user_id": project.user_id,
+            "slug": project.slug,
+            "correction_text": req.text,
+        })).await;
+    } else {
+        return Err(AppError::BadRequest("Invalid decision. Must be 'approve' or 'corrections'.".into()));
+    }
+
+    let updated_project = sqlx::query_as::<_, Project>(
+        "SELECT id, user_id, name, slug, repo_url, branch, status::text AS status, \
+         domain, webhook_secret, kubero_pipeline, kubero_app, created_at, updated_at \
+         FROM projects WHERE id = $1",
+    )
+    .bind(id)
+    .fetch_one(&state.db)
+    .await?;
+
+    Ok(Json(updated_project.into()))
 }
 
 async fn cluster_status(State(state): State<AppState>) -> AppResult<Json<ClusterStatus>> {

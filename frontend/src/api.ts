@@ -168,6 +168,9 @@ export const api = {
   adminDeleteProject: (id: string) =>
     request<void>(`/admin/projects/${id}`, { method: 'DELETE' }),
 
+  adminReviewProject: (id: string, decision: 'approve' | 'corrections', text: string) =>
+    request<Project>(`/admin/projects/${id}/review`, { method: 'PATCH', body: JSON.stringify({ decision, text }) }),
+
   clusterStatus: () => request<ClusterStatus>('/admin/cluster'),
 
   getDeploymentStatus: (id: string) =>

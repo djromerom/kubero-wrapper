@@ -1,4 +1,5 @@
-use k8s_openapi::api::core::v1::{Node, Pod};
+use k8s_openapi::api::apps::v1::Deployment;
+use k8s_openapi::api::core::v1::{Event as K8sEvent, Node, Pod};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use kube::{
     api::{Api, ListParams, Patch, PatchParams, PostParams},
@@ -38,6 +39,7 @@ pub struct KuberoPipelineSpec {
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, JsonSchema, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct KuberoPipelineStatus {
     #[serde(default)]
     pub phase: String,
@@ -90,6 +92,7 @@ pub struct KuberoAppSpec {
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, JsonSchema, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct KuberoAppStatus {
     #[serde(default)]
     pub phase: String,
@@ -352,30 +355,130 @@ impl KuberoManager {
         let app = api.get(app_name).await
             .map_err(|e| crate::error::AppError::Internal(format!("Failed to get KuberoApp: {}", e)))?;
         
-        // Extract status information from the CRD
-        let status = app.status.as_ref().map(|s| {
-            serde_json::json!({
-                "phase": s.phase,
-                "conditions": s.conditions,
-                "replicas": s.replicas,
-                "availableReplicas": s.available_replicas,
-                "updatedReplicas": s.updated_replicas,
-                "url": s.url,
-            })
-        }).unwrap_or_else(|| serde_json::json!({
-            "phase": "pending",
-            "conditions": [],
-            "replicas": 0,
-            "availableReplicas": 0,
-            "updatedReplicas": 0,
-            "url": null,
-        }));
+        // Read actual Deployments created by Kubero
+        let deployments_api: Api<Deployment> = Api::namespaced(self.client.clone(), namespace);
+        
+        let web_deployment_name = format!("{}-kuberoapp-web", app_name);
+        let worker_deployment_name = format!("{}-kuberoapp-worker", app_name);
+        
+        let web_deployment = deployments_api.get(&web_deployment_name).await.ok();
+        let worker_deployment = deployments_api.get(&worker_deployment_name).await.ok();
+        
+        // Aggregate replica counts from both deployments
+        let total_replicas = web_deployment.as_ref()
+            .and_then(|d| d.status.as_ref())
+            .and_then(|s| s.replicas)
+            .unwrap_or(0)
+            + worker_deployment.as_ref()
+            .and_then(|d| d.status.as_ref())
+            .and_then(|s| s.replicas)
+            .unwrap_or(0);
+        
+        let total_available = web_deployment.as_ref()
+            .and_then(|d| d.status.as_ref())
+            .and_then(|s| s.available_replicas)
+            .unwrap_or(0)
+            + worker_deployment.as_ref()
+            .and_then(|d| d.status.as_ref())
+            .and_then(|s| s.available_replicas)
+            .unwrap_or(0);
+        
+        let total_ready = web_deployment.as_ref()
+            .and_then(|d| d.status.as_ref())
+            .and_then(|s| s.ready_replicas)
+            .unwrap_or(0)
+            + worker_deployment.as_ref()
+            .and_then(|d| d.status.as_ref())
+            .and_then(|s| s.ready_replicas)
+            .unwrap_or(0);
+        
+        // Extract conditions from KuberoApp status
+        let conditions = app.status.as_ref()
+            .and_then(|s| if s.conditions.is_empty() { None } else { Some(&s.conditions) })
+            .map(|c| serde_json::to_value(c).unwrap_or(serde_json::json!([])))
+            .unwrap_or(serde_json::json!([]));
+
+        // Determine phase from conditions
+        let phase = if total_available >= total_replicas && total_replicas > 0 {
+            "Running".to_string()
+        } else if total_replicas > 0 {
+            "Building".to_string()
+        } else {
+            "Pending".to_string()
+        };
 
         Ok(serde_json::json!({
             "name": app_name,
             "namespace": namespace,
-            "status": status,
+            "status": {
+                "phase": phase,
+                "conditions": conditions,
+                "replicas": total_replicas,
+                "availableReplicas": total_available,
+                "readyReplicas": total_ready,
+                "url": app.status.as_ref().and_then(|s| {
+                    // Try to extract URL from deployedRelease message if available
+                    s.conditions.iter()
+                        .find(|c| c.get("type").and_then(|t| t.as_str()) == Some("Deployed"))
+                        .and_then(|c| c.get("message"))
+                        .and_then(|m| m.as_str())
+                        .and_then(|msg| {
+                            // Extract URL from message like "http://num300.app.estudiantes.cluster.local/"
+                            msg.lines()
+                                .find(|line| line.starts_with("http://") || line.starts_with("https://"))
+                                .map(|url| url.trim().to_string())
+                        })
+                }),
+            },
             "ingress": app.spec.ingress,
         }))
+    }
+
+    pub async fn get_app_events(&self, namespace: &str, app_name: &str) -> AppResult<Vec<serde_json::Value>> {
+        let events_api: Api<K8sEvent> = Api::namespaced(self.client.clone(), namespace);
+        
+        // Get all Pod events in the namespace (Kubernetes doesn't support regex in field selectors)
+        let lp = ListParams::default()
+            .fields("involvedObject.kind=Pod")
+            .limit(100);
+        
+        let events = events_api.list(&lp).await
+            .map_err(|e| crate::error::AppError::Internal(format!("Failed to get events: {}", e)))?;
+        
+        // Filter in Rust: only events for pods belonging to this app (name starts with {app_name}-kuberoapp)
+        let app_events: Vec<_> = events.items.into_iter()
+            .filter(|event| {
+                event.involved_object
+                    .name
+                    .as_ref()
+                    .map(|name| name.starts_with(&format!("{}-kuberoapp", app_name)))
+                    .unwrap_or(false)
+            })
+            .collect();
+        
+        // Sort by last_timestamp, most recent first
+        let mut sorted_events = app_events;
+        sorted_events.sort_by(|a, b| {
+            match (&b.last_timestamp, &a.last_timestamp) {
+                (Some(bt), Some(at)) => bt.cmp(at),
+                (Some(_), None) => std::cmp::Ordering::Greater,
+                (None, Some(_)) => std::cmp::Ordering::Less,
+                (None, None) => std::cmp::Ordering::Equal,
+            }
+        });
+        
+        // Take only the 20 most recent
+        let event_list = sorted_events.into_iter().take(20).map(|event| {
+            serde_json::json!({
+                "type": event.type_,
+                "reason": event.reason,
+                "message": event.message,
+                "first_timestamp": event.first_timestamp,
+                "last_timestamp": event.last_timestamp,
+                "count": event.count,
+            })
+        }).collect();
+        
+        Ok(event_list)
     }
 }

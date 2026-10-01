@@ -392,6 +392,10 @@ async fn get_deployment_status(
         if let Some(app_name) = &project.kubero_app {
             let namespace = &state.config.kubero_namespace;
             let status = kubero.get_app_status(namespace, app_name).await?;
+            
+            // Get pod events for this app
+            let events = kubero.get_app_events(namespace, app_name).await.unwrap_or_default();
+            
             return Ok(Json(json!({
                 "project_id": project.id,
                 "project_name": project.name,
@@ -399,6 +403,7 @@ async fn get_deployment_status(
                 "domain": project.domain,
                 "cluster_configured": true,
                 "kubero_status": status,
+                "events": events,
             })));
         }
     }
@@ -411,6 +416,7 @@ async fn get_deployment_status(
         "domain": null,
         "cluster_configured": state.kubero.is_some(),
         "kubero_status": null,
+        "events": [],
         "message": if state.kubero.is_some() { "Kubero application not yet created" } else { "Kubernetes is not configured" },
     })))
 }

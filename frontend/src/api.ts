@@ -89,15 +89,30 @@ export interface DeploymentStatus {
     namespace: string;
     status: {
       phase: string;
-      conditions: any[];
+      conditions: Array<{
+        type: string;
+        status: string;
+        reason?: string;
+        message?: string;
+      }>;
       replicas: number;
       availableReplicas: number;
-      updatedReplicas: number;
+      readyReplicas: number;
       url: string | null;
     };
     ingress: any;
   } | null;
+  events: K8sEvent[];
   message?: string;
+}
+
+export interface K8sEvent {
+  type: string;
+  reason: string;
+  message: string;
+  first_timestamp: string | null;
+  last_timestamp: string | null;
+  count: number | null;
 }
 
 export interface GithubRepository {

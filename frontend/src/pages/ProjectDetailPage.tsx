@@ -2,7 +2,7 @@ import DemoProjectDetailPage from './DemoProjectDetailPage';
 import { getDemoUser } from '../demoSession';
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { api, type Project, type Build, type DeploymentStatus } from '../api';
+import { api, type Project, type Build, type DeploymentStatus, type K8sEvent } from '../api';
 import StatusBadge from '../components/StatusBadge';
 import { IconExternalLink } from '@tabler/icons-react';
 
@@ -93,6 +93,22 @@ function RealProjectDetailPage() {
     navigate('/');
   };
 
+  const translateReason = (reason: string): string => {
+    const translations: Record<string, string> = {
+      "Scheduled": "Programado",
+      "Pulling": "Descargando imagen",
+      "Pulled": "Imagen descargada",
+      "Created": "Contenedor creado",
+      "Started": "Contenedor iniciado",
+      "Failed": "Falló",
+      "BackOff": "Reintentando",
+      "FailedScheduling": "No se pudo programar",
+      "Unhealthy": "Fallo en chequeo de salud",
+      "FailedMount": "Error al montar volumen",
+    };
+    return translations[reason] || reason;
+  };
+
   if (loading) return <p className="text-atlas-muted">Cargando...</p>;
   if (!project) return <p className="text-atlas-muted">Proyecto no encontrado</p>;
 
@@ -133,8 +149,50 @@ function RealProjectDetailPage() {
             </div>
             <div className="flex justify-between">
               <span className="text-atlas-muted">Replicas:</span>
-              <span className="font-medium">{deploymentStatus.kubero_status.status.availableReplicas} / {deploymentStatus.kubero_status.status.replicas}</span>
+              <span className="font-medium">{deploymentStatus.kubero_status.status.readyReplicas} / {deploymentStatus.kubero_status.status.availableReplicas} / {deploymentStatus.kubero_status.status.replicas}</span>
             </div>
+            {deploymentStatus.kubero_status.status.conditions.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-atlas-mist">
+                <span className="text-atlas-muted block mb-2">Condiciones:</span>
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {deploymentStatus.kubero_status.status.conditions.map((cond, idx) => (
+                    <div key={idx} className="text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{cond.type}</span>
+                        <span className={`text-xs ${cond.status === 'True' ? 'text-green-600' : cond.status === 'False' ? 'text-red-600' : 'text-yellow-600'}`}>
+                          {cond.status}
+                        </span>
+                      </div>
+                      {cond.reason && <span className="text-atlas-muted ml-2">{cond.reason}</span>}
+                      {cond.message && <p className="text-atlas-muted mt-1 break-all">{cond.message}</p>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {deploymentStatus.events.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-atlas-mist">
+                <span className="text-atlas-muted block mb-2">Eventos de pods:</span>
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {deploymentStatus.events.map((event, idx) => (
+                    <div key={idx} className="border-b border-atlas-mist pb-2 last:border-0">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-xs font-medium ${event.type === 'Warning' ? 'text-red-600' : event.type === 'Error' ? 'text-red-600' : 'text-green-600'}`}>
+                          {event.type}
+                        </span>
+                        <span className="text-xs text-atlas-muted">{translateReason(event.reason)}</span>
+                        {event.last_timestamp && (
+                          <span className="text-xs text-atlas-muted ml-auto">
+                            {new Date(event.last_timestamp).toLocaleTimeString('es-CO')}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-atlas-muted mt-1 break-all">{event.message}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             {deploymentStatus.kubero_status.status.url && deploymentStatus.kubero_status.status.availableReplicas > 0 && (
               <div className="mt-3 pt-3 border-t border-atlas-mist">
                 <span className="text-atlas-muted block mb-1">URL de la aplicación:</span>

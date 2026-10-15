@@ -71,6 +71,20 @@ pub struct Project {
     pub repo_url: String,
     pub branch: String,
     pub status: String,
+    #[sqlx(default)]
+    pub requested_subdomain: Option<String>,
+    #[sqlx(default)]
+    pub purpose: Option<String>,
+    #[sqlx(default)]
+    pub course: Option<String>,
+    #[sqlx(default)]
+    pub review_note: Option<String>,
+    #[sqlx(default)]
+    pub source_commit: Option<String>,
+    #[sqlx(default)]
+    pub adaptation_report: Option<serde_json::Value>,
+    #[sqlx(default)]
+    pub approved_image: Option<String>,
     pub domain: Option<String>,
     pub webhook_secret: Option<String>,
     pub kubero_pipeline: Option<String>,
@@ -85,12 +99,129 @@ pub struct CreateProjectRequest {
     pub repo_url: String,
     #[serde(default = "default_branch")]
     pub branch: String,
+    #[serde(default)]
+    pub requested_subdomain: String,
+    pub purpose: String,
+    #[serde(default)]
+    pub course: Option<String>,
+    #[serde(default)]
+    pub deployment_config: DeploymentConfig,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct AdminReviewRequest {
+pub struct SubdomainQuery {
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct DeploymentConfig {
+    pub port: u16,
+    pub health_path: String,
+    pub build_env: std::collections::BTreeMap<String, String>,
+    pub runtime_env: std::collections::BTreeMap<String, String>,
+    pub postgres: bool,
+    pub redis: bool,
+    pub migration_command: String,
+    pub worker_command: String,
+}
+
+impl Default for DeploymentConfig {
+    fn default() -> Self {
+        Self { port: 3000, health_path: "/".into(), build_env: Default::default(),
+            runtime_env: Default::default(), postgres: false, redis: false,
+            migration_command: String::new(), worker_command: String::new() }
+    }
+}
+
+impl DeploymentConfig {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.port == 0 || !self.health_path.starts_with('/') || self.health_path.starts_with("//")
+            || self.health_path.len() > 256 || self.health_path.chars().any(char::is_control) {
+            return Err("Revisa el puerto y la ruta de comprobación HTTP.".into());
+        }
+        for (is_build, values) in [(true, &self.build_env), (false, &self.runtime_env)] {
+            if values.len() > 50 { return Err("Máximo 50 variables por sección.".into()); }
+            for (key, value) in values {
+                if key.is_empty() || key.len() > 100 || !key.bytes().enumerate().all(|(i, c)|
+                    c == b'_' || c.is_ascii_alphabetic() || (i > 0 && c.is_ascii_digit()))
+                    || value.len() > 8192 || value.contains('\0') {
+                    return Err("Nombre o valor de variable no válido.".into());
+                }
+                if is_build && !["NEXT_PUBLIC_", "PUBLIC_", "VITE_"].iter().any(|prefix| key.starts_with(prefix)) {
+                    return Err("Las variables de construcción deben ser públicas: NEXT_PUBLIC_, PUBLIC_ o VITE_.".into());
+                }
+                if !is_build && ["PORT", "HOST", "NODE_ENV"].contains(&key.as_str()) {
+                    return Err("PORT, HOST y NODE_ENV los gestiona Atlas.".into());
+                }
+                if !is_build && ((self.postgres && key == "DATABASE_URL") || (self.redis && ["REDIS_URL", "REDIS_HOST", "REDIS_PORT"].contains(&key.as_str()))) {
+                    return Err("Atlas configura automáticamente las variables de los servicios seleccionados.".into());
+                }
+            }
+        }
+        if self.migration_command.len() > 1000 || self.worker_command.len() > 1000
+            || self.migration_command.contains('\0') || self.worker_command.contains('\0') {
+            return Err("El comando es demasiado largo o contiene caracteres no válidos.".into());
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod deployment_tests {
+    use super::DeploymentConfig;
+
+    #[test]
+    fn defaults_and_public_variables_are_valid() {
+        let mut config = DeploymentConfig::default();
+        assert!(config.validate().is_ok());
+        config.build_env.insert("NEXT_PUBLIC_API_URL".into(), "https://example.test/api?a=1&b=2".into());
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn server_secrets_cannot_be_sent_as_public_build_values() {
+        let mut config = DeploymentConfig::default();
+        config.build_env.insert("JWT_SECRET".into(), "secret".into());
+        assert!(config.validate().is_err());
+        config.build_env.clear();
+        config.runtime_env.insert("JWT_SECRET".into(), "secret".into());
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn managed_connections_and_invalid_health_paths_are_rejected() {
+        let mut config = DeploymentConfig::default();
+        config.postgres = true;
+        config.runtime_env.insert("DATABASE_URL".into(), "external".into());
+        assert!(config.validate().is_err());
+        config.runtime_env.clear();
+        config.health_path = "//external.test".into();
+        assert!(config.validate().is_err());
+        config.health_path = "/api/docs".into();
+        assert!(config.validate().is_ok());
+        config.port = 0;
+        assert!(config.validate().is_err());
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct SubdomainAvailability {
+    pub available: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ReviewProjectRequest {
     pub decision: String,
-    pub text: String,
+    #[serde(default)]
+    pub technical_correction: bool,
+    #[serde(default, alias = "text")]
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ResubmitProjectRequest {
+    pub purpose: String,
 }
 
 fn default_branch() -> String {
@@ -105,6 +236,12 @@ pub struct ProjectResponse {
     pub repo_url: String,
     pub branch: String,
     pub status: String,
+    pub requested_subdomain: Option<String>,
+    pub purpose: Option<String>,
+    pub course: Option<String>,
+    pub review_note: Option<String>,
+    pub source_commit: Option<String>,
+    pub adaptation_report: Option<serde_json::Value>,
     pub domain: Option<String>,
     pub webhook_url: Option<String>,
     pub created_at: DateTime<Utc>,
@@ -119,6 +256,12 @@ impl From<Project> for ProjectResponse {
             repo_url: p.repo_url,
             branch: p.branch,
             status: p.status,
+            requested_subdomain: p.requested_subdomain,
+            purpose: p.purpose,
+            course: p.course,
+            review_note: p.review_note,
+            source_commit: p.source_commit,
+            adaptation_report: p.adaptation_report,
             domain: p.domain.clone(),
             webhook_url: p.webhook_secret.map(|_| {
                 format!("/api/webhook/{}", p.id)

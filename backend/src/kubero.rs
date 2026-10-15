@@ -1,8 +1,9 @@
 use k8s_openapi::api::apps::v1::Deployment;
-use k8s_openapi::api::core::v1::{Event as K8sEvent, Node, Pod};
+use k8s_openapi::api::core::v1::{Event as K8sEvent, Node, Pod, Service, Secret, PersistentVolumeClaim};
+use k8s_openapi::api::batch::v1::Job;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use kube::{
-    api::{Api, ListParams, Patch, PatchParams, PostParams},
+    api::{Api, ListParams, LogParams, Patch, PatchParams, PostParams},
     config::{KubeConfigOptions, Kubeconfig},
     Client, Config as KubeConfig, CustomResource,
 };
@@ -330,6 +331,46 @@ impl KuberoManager {
         api.delete(app_name, &Default::default()).await
             .map_err(|e| crate::error::AppError::Internal(format!("Failed to delete KuberoApp: {}", e)))?;
         Ok(())
+    }
+
+    pub async fn delete_project_services(&self, namespace: &str, slug: &str) -> AppResult<()> {
+        let labels = ListParams::default().labels(&format!("atlas-project={slug}"));
+        let params = Default::default();
+        Api::<Deployment>::namespaced(self.client.clone(), namespace).delete_collection(&params, &labels).await?;
+        Api::<Job>::namespaced(self.client.clone(), namespace).delete_collection(&params, &labels).await?;
+        Api::<Service>::namespaced(self.client.clone(), namespace).delete_collection(&params, &labels).await?;
+        Api::<Secret>::namespaced(self.client.clone(), namespace).delete_collection(&params, &labels).await?;
+        Api::<PersistentVolumeClaim>::namespaced(self.client.clone(), namespace).delete_collection(&params, &labels).await?;
+        Ok(())
+    }
+
+    pub async fn get_runtime_logs(&self, namespace: &str, slug: &str) -> AppResult<Vec<serde_json::Value>> {
+        let api = Api::<Pod>::namespaced(self.client.clone(), namespace);
+        let pods = api.list(&ListParams::default()).await?;
+        let mut result = Vec::new();
+        let password = Api::<Secret>::namespaced(self.client.clone(), namespace)
+            .get(&format!("{slug}-postgres-credentials")).await.ok()
+            .and_then(|secret| secret.data).and_then(|mut data| data.remove("POSTGRES_PASSWORD"))
+            .map(|value| String::from_utf8_lossy(&value.0).into_owned());
+        for pod in pods.items {
+            let belongs = pod.metadata.labels.as_ref().is_some_and(|labels| {
+                labels.get("atlas-project").is_some_and(|value| value == slug)
+                    || labels.get("app.kubernetes.io/instance").is_some_and(|value|
+                        value == &format!("{slug}-web") || value == &format!("{slug}-worker"))
+            });
+            if !belongs { continue; }
+            let name = pod.metadata.name.unwrap_or_default();
+            if let Some(spec) = pod.spec {
+                for container in spec.containers {
+                    let params = LogParams { container: Some(container.name.clone()), tail_lines: Some(100),
+                        limit_bytes: Some(65536), timestamps: true, ..Default::default() };
+                    let mut logs = api.logs(&name, &params).await.unwrap_or_else(|_| "El contenedor aún no tiene logs disponibles.".into());
+                    if let Some(secret) = &password { if !secret.is_empty() { logs = logs.replace(secret, "[oculto]"); } }
+                    result.push(serde_json::json!({ "pod": name, "container": container.name, "logs": logs }));
+                }
+            }
+        }
+        Ok(result)
     }
 
     pub async fn trigger_build(&self, namespace: &str, app_name: &str) -> AppResult<String> {

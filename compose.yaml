@@ -44,5 +44,13 @@ services:
     ports:
       - "3000:3000"
 
+  frontend:
+    build: ./frontend
+    depends_on:
+      backend:
+        condition: service_started
+    ports:
+      - "5173:80"
+
 volumes:
   atlas-postgres:

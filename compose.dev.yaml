@@ -1,0 +1,12 @@
+services:
+  frontend:
+    image: kubero-wrapper-frontend-dev
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    environment:
+      VITE_API_PROXY_TARGET: http://backend:3000
+      VITE_USE_POLLING: "true"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules

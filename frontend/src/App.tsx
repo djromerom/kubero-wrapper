@@ -1,45 +1,52 @@
-import ClusterPage from './pages/ClusterPage';
-import DeployGuidePage from './pages/DeployGuidePage';
+import ClusterPage from './content/ClusterPage';
+import DocumentationPage from './content/DocumentationPage';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './AuthContext';
-import LoginPage from './pages/LoginPage';
-import RegisterPage from './pages/RegisterPage';
+import { AuthProvider } from './login/AuthContext';
+import LoginPage from './login/LoginPage';
+import RegisterPage from './login/RegisterPage';
 
-import DashboardPage from './pages/DashboardPage';
-import ProjectDetailPage from './pages/ProjectDetailPage';
-import AdminPage from './pages/AdminPage';
-import Layout from './components/Layout';
-import ToastProvider from './components/ToastProvider';
-
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { token, user, loading } = useAuth();
-  if (loading) return <div className="flex items-center justify-center h-screen">Cargando...</div>;
-  if (!token && !user) return <Navigate to="/login" />;
-  return <>{children}</>;
-}
-
-function AdminRoute({ children }: { children: React.ReactNode }) {
-  const { isAdmin, loading } = useAuth();
-  if (loading) return <div className="flex items-center justify-center h-screen">Cargando...</div>;
-  if (!isAdmin) return <Navigate to="/" />;
-  return <>{children}</>;
-}
+import DashboardPage from './content/DashboardPage';
+import ProjectDetailPage from './content/ProjectDetailPage';
+import AdminPage from './content/AdminPage';
+import Layout from './Layout';
+import ProtectedRoute from './login/ProtectedRoute';
+import AdminRoute from './login/AdminRoute';
+import ToastProvider from './shared/ToastProvider';
 
 export default function App() {
+  const protectedLayout = (
+    <ProtectedRoute>
+      <Layout />
+    </ProtectedRoute>
+  );
+  const clusterPage = (
+    <AdminRoute>
+      <ClusterPage />
+    </AdminRoute>
+  );
+  const platformProjectsPage = (
+    <AdminRoute>
+      <AdminPage />
+    </AdminRoute>
+  );
+
   return (
     <BrowserRouter>
       <AuthProvider>
         <ToastProvider>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
-          <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-            <Route index element={<DashboardPage />} /><Route path="como-desplegar" element={<DeployGuidePage />} />
-            <Route path="projects/:id" element={<ProjectDetailPage />} />
-            <Route path="admin" element={<AdminRoute><ClusterPage /></AdminRoute>} /><Route path="admin/projects" element={<AdminRoute><AdminPage /></AdminRoute>} />
-          </Route>
-          <Route path="*" element={<Navigate to="/" />} />
-        </Routes>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+            <Route path="/" element={protectedLayout}>
+              <Route index element={<DashboardPage />} />
+              <Route path="documentacion" element={<DocumentationPage />} />
+              <Route path="como-desplegar" element={<Navigate to="/documentacion" replace />} />
+              <Route path="projects/:id" element={<ProjectDetailPage />} />
+              <Route path="admin" element={clusterPage} />
+              <Route path="admin/projects" element={platformProjectsPage} />
+            </Route>
+            <Route path="*" element={<Navigate to="/" />} />
+          </Routes>
         </ToastProvider>
       </AuthProvider>
     </BrowserRouter>

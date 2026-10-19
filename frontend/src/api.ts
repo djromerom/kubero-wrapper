@@ -1,6 +1,3 @@
-import { clusterDemo } from './demoFixtures';
-import { listDemoProjects } from './demoProjects';
-import { getDemoUser } from './demoSession';
 const API_BASE = '/api';
 
 function getToken(): string | null {
@@ -8,17 +5,6 @@ function getToken(): string | null {
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  if (getDemoUser()) {
-    if(path === '/admin/cluster' && getDemoUser()?.role === 'admin') return clusterDemo as T;
-    if (!options.method && (path === '/projects' || path === '/admin/projects')) return listDemoProjects(path === '/admin/projects') as T;
-    if (!options.method && path.startsWith('/projects/')) {
-      const parts = path.split('/');
-      const project = listDemoProjects(true).find(item => item.id === parts[2]);
-      if (project && parts.length === 3) return project as T;
-      if (project && parts[3] === 'builds') return (project.builds || []) as T;
-    }
-    throw new Error('Esta operación requiere la conexión real. Estás en modo de demostración.');
-  }
   const token = getToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -54,6 +40,29 @@ export interface Project {
   repo_url: string;
   branch: string;
   status: string;
+  requested_subdomain?: string | null;
+  purpose?: string | null;
+  course?: string | null;
+  review_note?: string | null;
+  source_commit?: string | null;
+  adaptation_report?: {
+    outcome: string;
+    summary?: string;
+    commit?: string;
+    platform?: string;
+    build_strategy?: string;
+    changes?: string[];
+    port?: number;
+    engine?: string;
+    kubero_build?: string;
+    kubero_job?: string;
+    kubero_namespace?: string;
+    build_verified: boolean;
+    runtime_verified?: boolean;
+    components?: { path: string; framework: string }[];
+    blockers?: string[];
+    warnings?: string[];
+  } | null;
   domain: string | null;
   webhook_url: string | null;
   created_at: string;
@@ -71,11 +80,32 @@ export interface Build {
   created_at: string;
 }
 
-export interface ClusterStatus {
-  nodes: number;
-  pods: number;
-  cpu_usage: number;
-  memory_usage: number;
+export interface DeploymentConfig {
+  port: number;
+  health_path: string;
+  build_env: Record<string, string>;
+  runtime_env: Record<string, string>;
+  postgres: boolean;
+  redis: boolean;
+  migration_command: string;
+  worker_command: string;
+}
+
+export const defaultDeploymentConfig: DeploymentConfig = {
+  port: 3000,
+  health_path: '/',
+  build_env: {},
+  runtime_env: {},
+  postgres: false,
+  redis: false,
+  migration_command: '',
+  worker_command: '',
+};
+
+export interface RuntimeLog {
+  pod: string;
+  container: string;
+  logs: string;
 }
 
 export interface DeploymentStatus {
@@ -123,18 +153,25 @@ export interface GithubRepository {
   clone_url?: string;
 }
 
-export interface GithubBranch { name: string }
-export interface GithubStatus { linked: boolean; login?: string; github_user_id?: number }
-export interface GithubRepositoriesResponse { repositories: GithubRepository[] }
-export interface GithubBranchesResponse { owner: string; repository: string; branches: GithubBranch[] }
-export interface GithubLatestCommitResponse {
+export interface GithubBranch {
+  name: string;
+}
+export interface GithubStatus {
+  linked: boolean;
+  login?: string;
+  github_user_id?: number;
+}
+export interface GithubRepositoriesResponse {
+  repositories: GithubRepository[];
+}
+export interface GithubBranchesResponse {
   owner: string;
   repository: string;
-  branch: string;
-  commit: { sha: string; commit: { message: string } };
+  branches: GithubBranch[];
 }
-
 export const api = {
+  retryAdaptation: (id: string) =>
+    request<void>(`/projects/${id}/adaptation/retry`, { method: 'POST' }),
   health: () => request<{ status: string }>('/health'),
 
   register: (data: { email: string; password: string; name: string }) =>
@@ -147,11 +184,45 @@ export const api = {
 
   getProject: (id: string) => request<Project>(`/projects/${id}`, { cache: 'no-store' }),
 
-  createProject: (data: { name: string; repo_url: string; branch?: string }) =>
-    request<Project>('/projects', { method: 'POST', body: JSON.stringify(data) }),
+  createProject: (data: {
+    name: string;
+    repo_url: string;
+    branch: string;
+    requested_subdomain: string;
+    purpose: string;
+    course?: string;
+    deployment_config?: DeploymentConfig;
+  }) => request<Project>('/projects', { method: 'POST', body: JSON.stringify(data) }),
 
-  deleteProject: (id: string) =>
-    request<void>(`/projects/${id}`, { method: 'DELETE' }),
+  subdomainAvailability: (name: string) =>
+    request<{ available: boolean }>(`/subdomains/availability?name=${encodeURIComponent(name)}`),
+
+  resubmitProject: (id: string, purpose: string) =>
+    request<Project>(`/projects/${id}/resubmit`, {
+      method: 'POST',
+      body: JSON.stringify({ purpose }),
+    }),
+
+  getConfiguration: (id: string) =>
+    request<DeploymentConfig>(`/projects/${id}/configuration`, { cache: 'no-store' }),
+  runtimeLogs: (id: string) =>
+    request<RuntimeLog[]>(`/projects/${id}/runtime-logs`, { cache: 'no-store' }),
+
+  saveConfiguration: (id: string, config: DeploymentConfig) =>
+    request<void>(`/projects/${id}/configuration`, { method: 'PUT', body: JSON.stringify(config) }),
+
+  reviewProject: (
+    id: string,
+    decision: 'approve' | 'corrections',
+    note?: string,
+    technicalCorrection = false
+  ) =>
+    request<Project>(`/admin/projects/${id}/review`, {
+      method: 'POST',
+      body: JSON.stringify({ decision, note, technical_correction: technicalCorrection }),
+    }),
+
+  deleteProject: (id: string) => request<void>(`/projects/${id}`, { method: 'DELETE' }),
 
   listBuilds: (projectId: string) =>
     request<Build[]>(`/projects/${projectId}/builds`, { cache: 'no-store' }),
@@ -163,30 +234,22 @@ export const api = {
 
   githubConnect: async () => {
     const { authorization_url } = await request<{ authorization_url: string }>('/github/connect');
-    window.location.assign(authorization_url);
+    const url = new URL(authorization_url);
+    // GitHub must let each Atlas account choose its own GitHub identity.
+    url.searchParams.set('prompt', 'select_account');
+    window.location.assign(url.toString());
   },
 
-  githubDisconnect: () =>
-    request<void>('/github/disconnect', { method: 'DELETE' }),
+  githubDisconnect: () => request<void>('/github/disconnect', { method: 'DELETE' }),
 
-  listGithubRepositories: () =>
-    request<GithubRepositoriesResponse>('/github/repositories'),
+  listGithubRepositories: () => request<GithubRepositoriesResponse>('/github/repositories'),
 
   listGithubBranches: (owner: string, repo: string) =>
-    request<GithubBranchesResponse>(`/github/repositories/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/branches`),
+    request<GithubBranchesResponse>(
+      `/github/repositories/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/branches`
+    ),
 
-  getLatestGithubCommit: (owner: string, repo: string, branch: string) =>
-    request<GithubLatestCommitResponse>(`/github/repositories/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/latest-commit?branch=${encodeURIComponent(branch)}`),
-
-  adminListProjects: () => request<Project[]>('/admin/projects'),
-
-  adminDeleteProject: (id: string) =>
-    request<void>(`/admin/projects/${id}`, { method: 'DELETE' }),
-
-  adminReviewProject: (id: string, decision: 'approve' | 'corrections', text: string) =>
-    request<Project>(`/admin/projects/${id}/review`, { method: 'PATCH', body: JSON.stringify({ decision, text }) }),
-
-  clusterStatus: () => request<ClusterStatus>('/admin/cluster'),
+  adminListProjects: () => request<Project[]>('/admin/projects', { cache: 'no-store' }),
 
   getDeploymentStatus: (id: string) =>
     request<DeploymentStatus>(`/projects/${id}/deployment-status`),

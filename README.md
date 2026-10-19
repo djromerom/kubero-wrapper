@@ -116,7 +116,7 @@ La suite inicia el backend compilado, aplica migraciones y verifica HTTP, autent
 
 Para incluir el cliente TypeScript, instalar antes sus dependencias con `npm ci` desde `frontend/`, disponer de Node y establecer `ATLAS_TEST_CLIENT=1`. Se ejecutará `frontend/tests/api.integration.cjs`, que inicia Vite y realiza peticiones reales a través de su proxy. El workflow `backend.yaml` prepara los servicios y ejecuta ambas integraciones automáticamente.
 
-La [arquitectura](docs/architecture.md) distingue la implementación del [flujo objetivo](docs/project-flow.md). La autenticación institucional, SSE y el ciclo de vida completo siguen pendientes.
+La [arquitectura](docs/architecture.md) distingue la implementación del [flujo objetivo](<Project Flow.md>). La autenticación institucional, SSE y el ciclo de vida completo siguen pendientes.
 
 ## GitHub y autenticación
 
@@ -172,7 +172,8 @@ Las pruebas de servicios y construcción con Kubernetes requieren infraestructur
 ## Modelo y seguimiento
 
 - [Arquitectura](docs/architecture.md): componentes y conexiones implementadas.
-- [Flujo del proyecto](docs/project-flow.md): pasos y estados del diseño objetivo, todavía en reconciliación.
+- [Flujo del proyecto](<Project Flow.md>): pasos y estados del diseño objetivo, todavía en reconciliación.
+- [Actores y herramientas](Actors.md): responsabilidades de las herramientas de la plataforma.
 - [Issues](https://github.com/djromerom/kubero-wrapper/issues): seguimiento de requisitos y trabajo pendiente.
 - [Requisitos funcionales](docs/requirements/functional.md) y [no funcionales](docs/requirements/non-functional.md): documentos en reconciliación con los issues.
 - [Segunda versión](https://github.com/djromerom/kubero-wrapper/issues/23): backlog V2 y propuesta de colaboradores.

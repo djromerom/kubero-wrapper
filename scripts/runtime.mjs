@@ -123,4 +123,3 @@ export const sqlLiteral = value => `'${String(value).replaceAll("'", "''")}'`;
 export async function database(sql, runner = run) {
   return (await runner('docker', ['compose', '-f', join(repoRoot, 'compose.yaml'), 'exec', '-T', 'postgres', 'psql', '-U', 'postgres', '-d', 'kubero_wrapper', '-q', '-t', '-A', '-v', 'ON_ERROR_STOP=1', '-f', '-'], { input: sql })).stdout;
 }
-

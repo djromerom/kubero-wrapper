@@ -337,6 +337,10 @@ async fn repository_values(state: &AppState, account: &GitHubAccount) -> AppResu
             .cloned()
             .unwrap_or_default()
         {
+            let personal = repository.get("owner").and_then(|owner| owner.get("login"))
+                .and_then(Value::as_str)
+                .is_some_and(|login| login.eq_ignore_ascii_case(&account.github_login));
+            if !personal { continue; }
             if let Some(id) = repository.get("id").and_then(Value::as_i64) {
                 repositories.insert(id, repository);
             }
@@ -469,6 +473,9 @@ pub(crate) async fn validate_project_source(
 ) -> AppResult<(String, String)> {
     let account = account(state, user_id).await?;
     let (owner, repo) = parse_repository_url(repo_url)?;
+    if !owner.eq_ignore_ascii_case(&account.github_login) {
+        return Err(AppError::BadRequest("Selecciona un repositorio de tu cuenta personal de GitHub.".into()));
+    }
     verify_repository(state, &account, &owner, &repo).await?;
     let commit = latest_commit_value(&account, &owner, &repo, branch).await?;
     let sha = commit

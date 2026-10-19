@@ -40,7 +40,7 @@ impl Config {
             kubernetes_required: env::var("KUBERNETES_REQUIRED")
                 .map(|value| value.eq_ignore_ascii_case("true"))
                 .unwrap_or(false),
-            local_image_deployment: env::var("LOCAL_IMAGE_DEPLOYMENT")
+            local_image_deployment: env::var("EXTERNAL_IMAGE_DEPLOYMENT").or_else(|_| env::var("LOCAL_IMAGE_DEPLOYMENT"))
                 .map(|value| value.eq_ignore_ascii_case("true"))
                 .unwrap_or(false),
             domain_suffix: env::var("DOMAIN_SUFFIX")

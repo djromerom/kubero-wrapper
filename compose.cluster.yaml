@@ -1,0 +1,13 @@
+# Overlay for an external Kubernetes cluster (including K3s).
+# Run the image worker on the build machine with the same ATLAS_* settings.
+services:
+  backend:
+    environment:
+      EXTERNAL_IMAGE_DEPLOYMENT: "true"
+      KUBERNETES_REQUIRED: "true"
+      KUBE_CONFIG_PATH: /app/kubeconfig
+      KUBERO_NAMESPACE: atlas-production
+      DOMAIN_SUFFIX: ${ATLAS_DOMAIN_SUFFIX:?Configure the applications domain}
+      REGISTRY_URL: ${ATLAS_IMAGE_REGISTRY:?Configure the image registry}
+    volumes:
+      - ${ATLAS_KUBECONFIG_FILE:?Provide a kubeconfig for the target cluster}:/app/kubeconfig:ro

@@ -10,8 +10,9 @@ services:
       - ./.local/kubeconfig:/app/kubeconfig:ro
     networks:
       - default
-      - kind
+      - cluster
 
 networks:
-  kind:
+  cluster:
+    name: ${ATLAS_DOCKER_NETWORK:-k3d-atlas}
     external: true

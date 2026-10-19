@@ -1,0 +1,18 @@
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: atlas
+servers: 1
+agents: 0
+image: rancher/k3s:v1.35.5-k3s1
+kubeAPI:
+  hostIP: 127.0.0.1
+  hostPort: "6550"
+# HTTP/HTTPS are added after checking the new cluster during migration.
+options:
+  k3d:
+    wait: true
+    timeout: 180s
+  kubeconfig:
+    updateDefaultKubeconfig: false
+    switchCurrentContext: false

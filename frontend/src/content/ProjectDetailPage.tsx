@@ -1,6 +1,5 @@
-import AdaptationReport from './AdaptationReport';
-import { fieldClassName, fieldLabelClassName, controlClassName } from '../shared/formStyles';
-import { useState, useEffect, useCallback } from 'react';
+import BuildReport from './BuildReport';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api, type Project, type Build, type DeploymentStatus } from '../api';
 import { useAuth } from '../login/AuthContext';
@@ -8,6 +7,10 @@ import StatusBadge from './StatusBadge';
 import DeploymentSettings from './DeploymentSettings';
 import RuntimeLogs from './RuntimeLogs';
 import { IconExternalLink } from '@tabler/icons-react';
+import ProjectCorrectionsForm from './ProjectCorrectionsForm';
+import { correctionFieldOptions } from './correctionFields';
+import BuildsList from './BuildsList';
+import ProjectDeletion from './ProjectDeletion';
 
 export default function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -22,10 +25,9 @@ export default function ProjectDetailPage() {
   );
   const [deploymentStatus, setDeploymentStatus] = useState<DeploymentStatus | null>(null);
   const [loadingDeployment, setLoadingDeployment] = useState(false);
-  const [revisedPurpose, setRevisedPurpose] = useState('');
-  const [reviewError, setReviewError] = useState('');
-  const [resubmitting, setResubmitting] = useState(false);
   const admissionStatus = project?.status;
+  const deletionRequested = useRef(false);
+  deletionRequested.current = Boolean(project?.deletion_requested_at);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -36,7 +38,6 @@ export default function ProjectDetailPage() {
         api.getWebhook(id).catch(() => null),
       ]);
       setProject(p);
-      setRevisedPurpose(p.purpose || '');
       setBuilds(b);
       setWebhook(w);
     } catch (cause) {
@@ -86,7 +87,10 @@ export default function ProjectDetailPage() {
           setProject(updatedProject);
           setBuilds(updatedBuilds);
         }
-      } catch {
+      } catch (cause) {
+        if (active && deletionRequested.current && (cause as { status?: number }).status === 404) {
+          navigate(user?.role === 'admin' ? '/admin/projects' : '/');
+        }
         // Keep the last available project state and try again on the next poll.
       } finally {
         refreshing = false;
@@ -101,7 +105,7 @@ export default function ProjectDetailPage() {
       window.clearInterval(interval);
       document.removeEventListener('visibilitychange', refreshProject);
     };
-  }, [id]);
+  }, [id, navigate, user?.role]);
 
   // Poll deployment status every 10 seconds
   useEffect(() => {
@@ -115,12 +119,6 @@ export default function ProjectDetailPage() {
     }, 10000);
     return () => clearInterval(interval);
   }, [loadDeploymentStatus, admissionStatus]);
-
-  const handleDelete = async () => {
-    if (!id || !confirm('¿Seguro que quieres eliminar este proyecto?')) return;
-    await api.deleteProject(id);
-    navigate('/');
-  };
 
   const translateReason = (reason: string): string => {
     const translations: Record<string, string> = {
@@ -146,19 +144,7 @@ export default function ProjectDetailPage() {
       </p>
     );
 
-  const submitCorrections = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!id) return;
-    setResubmitting(true);
-    setReviewError('');
-    try {
-      setProject(await api.resubmitProject(id, revisedPurpose.trim()));
-    } catch (cause) {
-      setReviewError((cause as Error).message);
-    } finally {
-      setResubmitting(false);
-    }
-  };
+  const deletion = <ProjectDeletion project={project} onRequested={setProject} onDeleted={() => navigate(user?.role === 'admin' ? '/admin/projects' : '/')} />;
 
   if (['adapting', 'pending', 'corrections', 'approved'].includes(project.status))
     return (
@@ -170,8 +156,9 @@ export default function ProjectDetailPage() {
               {project.repo_url} · {project.branch}
             </p>
           </div>
-          <StatusBadge status={project.status} />
+          <StatusBadge status={project.deletion_requested_at ? 'deleting' : project.status} />
         </header>
+        {deletion}
         <section className="rounded-xl border border-atlas-mist p-5">
           <h2 className="font-semibold">Solicitud de proyecto</h2>
           <dl className="mt-4 space-y-3 text-sm">
@@ -192,54 +179,35 @@ export default function ProjectDetailPage() {
             La URL está reservada, pero la página todavía no está publicada.
           </p>
         </section>
-        <AdaptationReport project={project} onRetry={() => void load()} />
-        <DeploymentSettings id={project.id} status={project.status} readOnly={user?.role === 'admin'} onSaved={() => void load()} />
-        <RuntimeLogs id={project.id} />
+        {!project.deletion_requested_at && <BuildReport project={project} onRetry={() => void load()} />}
+        {user?.role === 'admin' && (
+          <DeploymentSettings id={project.id} status={project.status} readOnly onSaved={() => void load()} />
+        )}
         {builds.length > 0 && (
           <section className="rounded-xl border border-atlas-mist p-5">
             <h2 className="font-semibold">Logs de construcción</h2>
-            {builds.map((build) => (
-              <details key={build.id} open={build.id === builds[0].id} className="mt-3">
-                <summary className="cursor-pointer text-sm">
-                  {new Date(build.created_at).toLocaleString('es-CO')} · {build.status}
-                </summary>
-                <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-words text-xs text-atlas-muted">
-                  {build.logs || 'Sin logs'}
-                </pre>
-              </details>
-            ))}
+            <div className="mt-3">
+              <BuildsList builds={builds} />
+            </div>
           </section>
         )}
         {project.status === 'pending' && (
           <p className="rounded-xl bg-amber-50 p-5 text-sm">
-            El proyecto espera revisión administrativa. Consulta el reporte de adaptación antes de
-            la aprobación.
+            La solicitud espera revisión administrativa. La construcción y el despliegue comenzarán después de la aprobación.
           </p>
         )}
         {project.status === 'approved' && (
           <p className="rounded-xl bg-green-50 p-5 text-sm">
-            Proyecto aprobado. El despliegue está autorizado y espera un ejecutor configurado.
+            La solicitud fue aprobada. La construcción con Dockerfile comenzará cuando el ejecutor esté activo.
           </p>
         )}
-        {project.status === 'corrections' && (
+        {project.status === 'corrections' && !project.deletion_requested_at && (
           <section className="rounded-xl border border-amber-300 bg-amber-50 p-5">
             <h2 className="font-semibold">Correcciones solicitadas</h2>
             <p className="mt-2 text-sm">{project.review_note}</p>
+            <p className="mt-2 text-xs text-atlas-muted">Campos a corregir: {(project.correction_fields || []).map((field) => correctionFieldOptions.find((option) => option.value === field)?.label).join(', ')}</p>
             {user?.role !== 'admin' && (
-              <form className="mt-4 space-y-3" onSubmit={submitCorrections}>
-                <label className={fieldClassName}>
-                  <span className={fieldLabelClassName}>Propósito actualizado</span>
-                  <textarea required className={controlClassName} value={revisedPurpose} onChange={(event) => setRevisedPurpose(event.target.value)} placeholder={project.purpose || ''} />
-                </label>
-                {reviewError && (
-                  <p role="alert" className="text-sm text-atlas-red">
-                    {reviewError}
-                  </p>
-                )}
-                <button disabled={resubmitting} className="rounded-lg bg-atlas-red px-4 py-2 text-sm text-white disabled:opacity-50">
-                  Enviar a validación
-                </button>
-              </form>
+              <ProjectCorrectionsForm key={`${project.id}:${project.review_note}:${project.correction_fields?.join(',')}`} project={project} onSubmitted={setProject} />
             )}
           </section>
         )}
@@ -256,14 +224,11 @@ export default function ProjectDetailPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <StatusBadge status={project.status} />
-          {user?.role !== 'admin' && (
-            <button onClick={handleDelete} className="text-sm text-atlas-red hover:text-atlas-red">
-              Eliminar
-            </button>
-          )}
+          <StatusBadge status={project.deletion_requested_at ? 'deleting' : project.status} />
         </div>
       </div>
+
+      {deletion}
 
       <section className="mb-6 rounded-lg bg-white p-4">
         <h2 className="mb-3 font-semibold">Información del proyecto</h2>
@@ -275,8 +240,10 @@ export default function ProjectDetailPage() {
         </dl>
       </section>
 
-      <AdaptationReport project={project} onRetry={() => void load()} />
-      <DeploymentSettings id={project.id} status={project.status} readOnly={user?.role === 'admin'} onSaved={() => void load()} />
+      {!project.deletion_requested_at && <BuildReport project={project} onRetry={() => void load()} />}
+      {user?.role === 'admin' && (
+        <DeploymentSettings id={project.id} status={project.status} readOnly onSaved={() => void load()} />
+      )}
       <RuntimeLogs id={project.id} />
 
       {deploymentStatus && (
@@ -396,27 +363,7 @@ export default function ProjectDetailPage() {
 
       <div className="bg-white rounded-lg p-4">
         <h3 className="font-semibold mb-4">Builds</h3>
-        {builds.length === 0 ? (
-          <p className="text-atlas-muted text-sm">Todavía no hay ejecuciones de build.</p>
-        ) : (
-          <div className="space-y-3">
-            {builds.map((b) => (
-              <div key={b.id} className="bg-atlas-mist rounded-sm p-3">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm text-atlas-muted">
-                    {b.commit_message || b.commit_sha?.slice(0, 7) || 'Desconocido'}
-                  </span>
-                  <StatusBadge status={b.status} />
-                </div>
-                {b.logs && (
-                  <pre className="text-xs text-atlas-muted mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-words">
-                    {b.logs}
-                  </pre>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+        <BuildsList builds={builds} />
       </div>
     </div>
   );

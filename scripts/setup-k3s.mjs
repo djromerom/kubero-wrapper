@@ -4,6 +4,7 @@ import { randomBytes } from 'node:crypto';
 import { cli, localDir, repoRoot, run, kube, poll, patchResource } from './runtime.mjs';
 import { getClusterSettings, k3dCommand } from './cluster-settings.mjs';
 import { installBuilder } from './install-kubero-builder.mjs';
+import { startK3d } from './start-k3d.mjs';
 
 export async function connectK3s() {
   await mkdir(localDir, { recursive: true });
@@ -26,7 +27,7 @@ export async function exposeK3s() {
 export async function setupK3s({ expose = true } = {}) {
   await run('docker', ['info']);
   const clusters = JSON.parse((await run(k3dCommand(), ['cluster', 'list', '-o', 'json'])).stdout);
-  if (clusters.some(cluster => cluster.name === 'atlas')) await run(k3dCommand(), ['cluster', 'start', 'atlas'], { live: true });
+  if (clusters.some(cluster => cluster.name === 'atlas')) await startK3d();
   else await run(k3dCommand(), ['cluster', 'create', '--config', join(repoRoot, 'infra/k3d.yaml')], { live: true });
   const k = await connectK3s();
   await k(['wait', '--for=condition=Ready', 'node', '--all', '--timeout=180s']);

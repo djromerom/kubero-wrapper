@@ -9,10 +9,9 @@ import { api, type GithubRepository } from '../api';
 import GithubButton from '../shared/GithubButton';
 import type { ProjectDraft } from './projectDraft';
 import CustomSelect from './CustomSelect';
-import DeploymentFields from './DeploymentFields';
-import { defaultDeploymentConfig } from '../api';
 import { IconChevronRight } from '@tabler/icons-react';
 import { useAuth } from '../login/AuthContext';
+import { courseOptions } from './correctionFields';
 
 interface Props {
   open: boolean;
@@ -28,13 +27,6 @@ const initial: ProjectDraft = {
   course: '',
 };
 const validSubdomain = (name: string) => /^[a-z0-9](?:[a-z0-9-]{1,47}[a-z0-9])$/.test(name);
-const courseOptions = [
-  { value: '', label: 'No pertenece a ninguna clase' },
-  ...['Diseño Web II', 'Ingeniería de Software', 'Bases de Datos'].map((course) => ({
-    value: course,
-    label: course,
-  })),
-];
 
 export default function CreateProjectModal({ open, onClose, onCreated }: Props) {
   const { user } = useAuth();
@@ -42,8 +34,6 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
   const continueButton = useRef<HTMLButtonElement>(null);
   const [step, setStep] = useState(1);
   const [draft, setDraft] = useState<ProjectDraft>({ ...initial });
-  const [deploymentConfig, setDeploymentConfig] = useState(defaultDeploymentConfig);
-  const [deploymentValid, setDeploymentValid] = useState(true);
   const [error, setError] = useState('');
   const [confirmClose, setConfirmClose] = useState(false);
   const [sending, setSending] = useState(false);
@@ -107,8 +97,6 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
     }
     setStep(1);
     setDraft({ ...initial });
-    setDeploymentConfig({ ...defaultDeploymentConfig });
-    setDeploymentValid(true);
     setError('');
     setConfirmClose(false);
     setSending(false);
@@ -194,10 +182,6 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
   async function next(event: React.FormEvent) {
     event.preventDefault();
     setError('');
-    if (!deploymentValid) {
-      setError('Corrige las variables de despliegue antes de continuar.');
-      return;
-    }
     const projectName = draft.name.trim();
     if (
       step === 1 &&
@@ -251,7 +235,6 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
         requested_subdomain: subdomain,
         purpose: draft.purpose.trim(),
         course: draft.course || undefined,
-        deployment_config: deploymentConfig,
       });
       onCreated();
       onClose();
@@ -364,14 +347,6 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
                 <textarea className={controlClassName} rows={2} required value={draft.purpose} onChange={(event) => update('purpose', event.target.value)} placeholder="Explica qué hace la aplicación y para qué se utilizará" />
               </label>
               <CustomSelect label="Curso" value={draft.course} options={courseOptions} onChange={(value) => setDraft((current) => ({ ...current, course: value }))} />
-              <details className="rounded-xl border border-atlas-mist p-4">
-                <summary className="cursor-pointer text-sm font-medium">
-                  Configuración de despliegue
-                </summary>
-                <div className="mt-5">
-                  <DeploymentFields value={deploymentConfig} onChange={setDeploymentConfig} onValidityChange={setDeploymentValid} />
-                </div>
-              </details>
             </div>
           )}
           {step === 3 && (
@@ -386,15 +361,6 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
                 Descripción: draft.purpose,
                 Curso: draft.course || 'No pertenece',
                 Responsable: user?.name || 'Sin nombre',
-                Despliegue: `Detección automática · Puerto ${deploymentConfig.port} · HTTP ${deploymentConfig.health_path}`,
-                Servicios:
-                  [
-                    deploymentConfig.postgres && 'PostgreSQL',
-                    deploymentConfig.redis && 'Redis',
-                    deploymentConfig.worker_command && 'Worker',
-                  ]
-                    .filter(Boolean)
-                    .join(', ') || 'Solo aplicación',
               }).map(([label, value]) => (
                 <div key={label} className="grid gap-1 py-3 sm:grid-cols-[140px_minmax(0,1fr)]">
                   <dt className="text-xs text-atlas-muted">{label}</dt>
@@ -416,7 +382,7 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
             </button>
           )}
           <button type="submit" disabled={sending || githubLinked !== true || loadingGithub} className="inline-flex items-center gap-2 rounded-lg bg-atlas-red px-4 py-2 text-sm text-white hover:bg-atlas-ink disabled:opacity-50">
-            {sending ? 'Enviando…' : step === 3 ? 'Registrar y adaptar' : 'Siguiente'}
+            {sending ? 'Enviando…' : step === 3 ? 'Enviar solicitud' : 'Siguiente'}
             {step < 3 && <IconChevronRight size={16} stroke={2} aria-hidden="true" />}
           </button>
         </footer>

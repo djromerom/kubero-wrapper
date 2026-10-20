@@ -64,6 +64,10 @@ impl From<User> for UserResponse {
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
 pub struct Project {
+    #[sqlx(default)]
+    pub deletion_requested_at: Option<DateTime<Utc>>,
+    #[sqlx(default)]
+    pub deletion_error: Option<String>,
     pub id: Uuid,
     pub user_id: Uuid,
     pub name: String,
@@ -79,6 +83,8 @@ pub struct Project {
     pub course: Option<String>,
     #[sqlx(default)]
     pub review_note: Option<String>,
+    #[sqlx(default)]
+    pub correction_fields: Vec<String>,
     #[sqlx(default)]
     pub source_commit: Option<String>,
     #[sqlx(default)]
@@ -213,23 +219,88 @@ pub struct SubdomainAvailability {
 #[derive(Debug, Deserialize)]
 pub struct ReviewProjectRequest {
     pub decision: String,
-    #[serde(default)]
-    pub technical_correction: bool,
     #[serde(default, alias = "text")]
     pub note: Option<String>,
+    #[serde(default)]
+    pub correction_fields: Vec<String>,
 }
 
+pub const PROJECT_CORRECTION_FIELDS: [&str; 6] = [
+    "name", "repo_url", "branch", "purpose", "requested_subdomain", "course",
+];
+
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ResubmitProjectRequest {
-    pub purpose: String,
+    pub name: Option<String>,
+    pub repo_url: Option<String>,
+    pub branch: Option<String>,
+    pub purpose: Option<String>,
+    pub requested_subdomain: Option<String>,
+    pub course: Option<String>,
+}
+
+impl ResubmitProjectRequest {
+    pub fn validate_selection(&self, selected: &[String]) -> Result<(), String> {
+        if selected.is_empty() {
+            return Err("La solicitud no tiene campos de corrección definidos.".into());
+        }
+        let supplied = [
+            ("name", self.name.is_some()), ("repo_url", self.repo_url.is_some()),
+            ("branch", self.branch.is_some()), ("purpose", self.purpose.is_some()),
+            ("requested_subdomain", self.requested_subdomain.is_some()), ("course", self.course.is_some()),
+        ];
+        for (field, present) in supplied {
+            let required = selected.iter().any(|selected| selected == field)
+                || (field == "branch" && selected.iter().any(|selected| selected == "repo_url"));
+            if required && !present {
+                return Err(format!("Completa el campo solicitado: {field}."));
+            }
+            if present && !required {
+                return Err(format!("El campo {field} no fue solicitado para corrección."));
+            }
+        }
+        Ok(())
+    }
 }
 
 fn default_branch() -> String {
     "main".into()
 }
 
+#[cfg(test)]
+mod correction_tests {
+    use super::ResubmitProjectRequest;
+    use serde_json::json;
+
+    #[test]
+    fn resubmission_requires_exactly_the_requested_fields() {
+        let selected = vec!["name".into(), "purpose".into()];
+        let valid: ResubmitProjectRequest = serde_json::from_value(json!({"name":"Cronómetro", "purpose":"Descripción corregida"})).unwrap();
+        assert!(valid.validate_selection(&selected).is_ok());
+        let missing: ResubmitProjectRequest = serde_json::from_value(json!({"purpose":"Descripción corregida"})).unwrap();
+        assert!(missing.validate_selection(&selected).is_err());
+        let extra: ResubmitProjectRequest = serde_json::from_value(json!({"name":"Cronómetro", "purpose":"Descripción corregida", "course":"Otro"})).unwrap();
+        assert!(extra.validate_selection(&selected).is_err());
+        assert!(valid.validate_selection(&[]).is_err());
+    }
+
+    #[test]
+    fn changing_repository_requires_its_branch_and_allows_clearing_course() {
+        let missing_branch: ResubmitProjectRequest = serde_json::from_value(json!({"repo_url":"https://github.com/owner/project"})).unwrap();
+        assert!(missing_branch.validate_selection(&["repo_url".into()]).is_err());
+        let source: ResubmitProjectRequest = serde_json::from_value(json!({"repo_url":"https://github.com/owner/project", "branch":"main"})).unwrap();
+        assert!(source.validate_selection(&["repo_url".into()]).is_ok());
+        let clear: ResubmitProjectRequest = serde_json::from_value(json!({"course":""})).unwrap();
+        assert!(clear.validate_selection(&["course".into()]).is_ok());
+        assert!(serde_json::from_value::<ResubmitProjectRequest>(json!({"deployment_config":{}})).is_err());
+    }
+}
+
 #[derive(Debug, Serialize)]
 pub struct ProjectResponse {
+    pub deletion_requested_at: Option<DateTime<Utc>>,
+    pub deletion_error: Option<String>,
     pub id: Uuid,
     pub name: String,
     pub slug: String,
@@ -240,6 +311,7 @@ pub struct ProjectResponse {
     pub purpose: Option<String>,
     pub course: Option<String>,
     pub review_note: Option<String>,
+    pub correction_fields: Vec<String>,
     pub source_commit: Option<String>,
     pub adaptation_report: Option<serde_json::Value>,
     pub domain: Option<String>,
@@ -251,6 +323,8 @@ impl From<Project> for ProjectResponse {
     fn from(p: Project) -> Self {
         Self {
             id: p.id,
+            deletion_requested_at: p.deletion_requested_at,
+            deletion_error: p.deletion_error,
             name: p.name,
             slug: p.slug,
             repo_url: p.repo_url,
@@ -260,6 +334,7 @@ impl From<Project> for ProjectResponse {
             purpose: p.purpose,
             course: p.course,
             review_note: p.review_note,
+            correction_fields: p.correction_fields,
             source_commit: p.source_commit,
             adaptation_report: p.adaptation_report,
             domain: p.domain.clone(),

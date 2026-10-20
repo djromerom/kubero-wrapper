@@ -121,11 +121,11 @@ export default function DashboardPage() {
               Tu próximo proyecto empieza aquí. Registra tu repositorio.
             </p>
           )}
-          <p role="status" className="text-xs text-atlas-muted">
+          {/*<p role="status" className="text-xs text-atlas-muted">
             {activeStage
               ? `${visibleProjects.length} proyectos en ${activeStage.label.toLowerCase()} · ${projects.length} en total`
               : `${projects.length} proyectos en tu espacio de trabajo`}
-          </p>
+          </p>*/}
         </section>
       )}
       <CreateProjectModal open={showModal} onClose={() => setShowModal(false)} onCreated={refreshAfterCreation} />

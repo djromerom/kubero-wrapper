@@ -1,10 +1,11 @@
-import AdaptationReport from './AdaptationReport';
 import { fieldClassName, fieldLabelClassName, controlClassName } from '../shared/formStyles';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, type Project } from '../api';
+import { api, type CorrectionField, type Project } from '../api';
 import ProjectCard from './ProjectCard';
 import { useToast } from '../shared/ToastProvider';
+import CustomSelect from './CustomSelect';
+import { correctionFieldOptions } from './correctionFields';
 
 export default function AdminPage() {
   const toast = useToast();
@@ -13,8 +14,8 @@ export default function AdminPage() {
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<Project | null>(null);
   const [decision, setDecision] = useState<'approve' | 'corrections' | null>(null);
-  const [technical, setTechnical] = useState(false);
   const [text, setText] = useState('');
+  const [correctionFields, setCorrectionFields] = useState<CorrectionField[]>([]);
   const [error, setError] = useState('');
   const [sending, setSending] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
@@ -50,7 +51,7 @@ export default function AdminPage() {
     else dialog.current?.close();
   }, [selected]);
 
-  const pending = projects.filter((project) => project.status === 'pending');
+  const pending = projects.filter((project) => project.status === 'pending' && !project.deletion_requested_at);
   const visible = projects.filter(
     (project) =>
       (filter === 'all' || project.status === filter) &&
@@ -59,16 +60,20 @@ export default function AdminPage() {
   const repoName = selected?.repo_url.replace(/^https:\/\/github\.com\//, '') || '';
 
   function close() {
-    setTechnical(false);
     setSelected(null);
     setDecision(null);
     setText('');
+    setCorrectionFields([]);
     setError('');
   }
 
   async function review(event: React.FormEvent) {
     event.preventDefault();
     if (!selected || !decision) return;
+    if (decision === 'corrections' && (!correctionFields.length || !text.trim())) {
+      setError('Selecciona al menos un campo y explica las correcciones necesarias.');
+      return;
+    }
     if (decision === 'approve' && text !== repoName) {
       setError('Escribe exactamente el nombre del repositorio.');
       return;
@@ -79,8 +84,8 @@ export default function AdminPage() {
       await api.reviewProject(
         selected.id,
         decision,
-        decision === 'corrections' ? text : undefined,
-        technical
+        decision === 'corrections' ? text.trim() : undefined,
+        decision === 'corrections' ? correctionFields : undefined
       );
       toast(
         decision === 'approve'
@@ -96,20 +101,17 @@ export default function AdminPage() {
     }
   }
 
-  const refreshAfterRetry = () => {
-    close();
-    void load();
-  };
-
   const cancelDecision = () => {
     setDecision(null);
     setText('');
+    setCorrectionFields([]);
     setError('');
   };
 
   const selectProject = (project: Project) => {
     setSelected(project);
     setText('');
+    setCorrectionFields([]);
     setDecision(null);
     setError('');
   };
@@ -155,12 +157,10 @@ export default function AdminPage() {
         <div className="my-4 flex flex-wrap gap-2">
           {[
             ['all', 'Todos'],
-            ['adapting', 'En adaptación'],
             ['pending', 'Validación pendiente'],
             ['corrections', 'Por corregir'],
             ['approved', 'Aprobados'],
-            ['ci_pending', 'CI pendiente'],
-            ['building', 'CI en ejecución'],
+            ['building', 'Construyendo y desplegando'],
             ['running', 'Desplegados'],
             ['failed', 'Fallidos'],
           ].map(([value, label]) => (
@@ -206,7 +206,6 @@ export default function AdminPage() {
                 </div>
               ))}
             </dl>
-            <AdaptationReport project={selected} onRetry={refreshAfterRetry} />
             {!decision ? (
               <div className="flex flex-wrap justify-end gap-3">
                 <button onClick={close}>Cerrar</button>
@@ -218,7 +217,7 @@ export default function AdminPage() {
                     <button onClick={() => setDecision('corrections')} className="rounded-lg border p-2">
                       Solicitar correcciones
                     </button>
-                    <button disabled={!selected.adaptation_report?.build_verified} onClick={() => setDecision('approve')} className="rounded-lg bg-atlas-red p-2 text-white">
+                    <button onClick={() => setDecision('approve')} className="rounded-lg bg-atlas-red p-2 text-white">
                       Aprobar
                     </button>
                   </>
@@ -227,10 +226,21 @@ export default function AdminPage() {
             ) : (
               <form onSubmit={(event) => void review(event)}>
                 {decision === 'corrections' && (
-                  <label className="my-3 flex items-center gap-2 text-sm">
-                    <input type="checkbox" checked={technical} onChange={(event) => setTechnical(event.target.checked)} />
-                    La corrección afecta la adaptación técnica
-                  </label>
+                  <div className="mb-5 space-y-3">
+                    <CustomSelect label="Campos a corregir" value="" disabled={sending || correctionFields.length === correctionFieldOptions.length} options={[{ value: '', label: 'Selecciona un campo para añadirlo' }, ...correctionFieldOptions.filter((option) => !correctionFields.includes(option.value))]} onChange={(field) => { if (field) setCorrectionFields((current) => [...current, field as CorrectionField]); }} />
+                    {correctionFields.length > 0 && (
+                      <ul className="flex flex-wrap gap-2" aria-label="Campos seleccionados para corregir">
+                        {correctionFields.map((field) => (
+                          <li key={field}>
+                            <button type="button" disabled={sending} onClick={() => setCorrectionFields((current) => current.filter((selectedField) => selectedField !== field))} className="rounded-full bg-atlas-mist px-3 py-2 text-sm" aria-label={`Quitar ${correctionFieldOptions.find((option) => option.value === field)?.label}`}>
+                              {correctionFieldOptions.find((option) => option.value === field)?.label} <span aria-hidden="true">×</span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <p className="text-xs text-atlas-muted">Puedes añadir varios campos. Repositorio incluye la selección de su rama.</p>
+                  </div>
                 )}
                 <label className={fieldClassName}>
                   <span className={fieldLabelClassName}>
@@ -238,7 +248,7 @@ export default function AdminPage() {
                       ? `Escribe exactamente ${repoName}`
                       : 'Explicación obligatoria'}
                   </span>
-                  <textarea required value={text} onChange={(event) => setText(event.target.value)} className={controlClassName} rows={decision === 'approve' ? 1 : 4} />
+                  <textarea required disabled={sending} value={text} onChange={(event) => setText(event.target.value)} className={controlClassName} rows={decision === 'approve' ? 1 : 4} />
                 </label>
                 {error && (
                   <p role="alert" className="my-3 text-sm text-atlas-red">

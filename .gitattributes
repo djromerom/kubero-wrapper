@@ -1,3 +1,7 @@
 backend/migrations/003_project_admission.sql text eol=lf
+backend/migrations/005_deployment_config.sql text eol=lf
 backend/migrations/006_adaptation_status.sql text eol=lf
 backend/migrations/007_adaptation_reports.sql text eol=crlf
+backend/migrations/008_admission_before_build.sql text eol=lf
+backend/migrations/009_correction_fields.sql text eol=lf
+backend/migrations/010_verified_deletion.sql text eol=lf

@@ -10,10 +10,58 @@ Plataforma de proyectos de la Universidad del Norte, construida sobre Kubero.
 | `backend/` | API Rust, PostgreSQL y Redis; [desarrollo del backend](#backend) |
 | `scripts/` | Adaptación, construcción, servicios y despliegue del laboratorio |
 | `infra/` | Laboratorio K3s y adaptación del constructor del operador Kubero |
-| `.github/workflows/` | CI de la plataforma Atlas |
-| `docs/` | Arquitectura, flujo del proyecto y requisitos en reconciliación |
+| `docs/` | Actores, flujo del proyecto y requisitos en reconciliación |
 
-## Desarrollo con Docker
+## Trabajar en local con el ejecutor
+
+### Primera vez en otro equipo
+
+1. Clonar el repositorio y cambiar a la rama `testing`.
+2. Instalar Docker Desktop con contenedores Linux, Node.js 22 o posterior, `kubectl` y `k3d`, disponibles desde la terminal.
+3. Abrir Docker Desktop y esperar a que su motor esté listo. Dejar libres los puertos 80, 443, 3000, 5173, 5433, 6379 y 6550.
+4. Desde la raíz del repositorio, copiar la configuración:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Editar `.env`: asignar un `JWT_SECRET` aleatorio y configurar los valores de la GitHub App indicados en [GitHub y autenticación](#github-y-autenticación). Este archivo contiene secretos y no se sube a Git.
+
+Después, preparar el laboratorio y arrancar Atlas con su ejecutor:
+
+```powershell
+npm ci --prefix scripts
+node scripts/setup-k3s.mjs
+node scripts/start-local-kubero.mjs --build
+```
+
+La preparación crea el clúster local K3s dentro de Docker mediante k3d e instala Kubero y su registro de imágenes. El primer arranque puede tardar mientras descarga y construye las imágenes. Abrir [Atlas](http://localhost:5173), registrar una cuenta y vincular GitHub. Cada equipo tiene sus propios usuarios, proyectos, imágenes y clúster: estos datos y la carpeta `.local/` no se descargan con el repositorio. Para probar la aprobación también se necesita una cuenta con rol de administrador en esa base local.
+
+### Cada día
+
+Abrir Docker Desktop, esperar a que esté listo y ejecutar desde la raíz:
+
+```powershell
+node scripts/start-local-kubero.mjs
+```
+
+El comando inicia el clúster existente, comprueba Kubero, levanta frontend, API, PostgreSQL y Redis, y deja activo el **ejecutor** en segundo plano. No hace falta iniciar manualmente cada contenedor de k3d ni levantar primero `kubero-wrapper`.
+
+El ejecutor procesa los proyectos aprobados: construye su Dockerfile, publica la imagen en el registro local y despliega con Kubero. También procesa las solicitudes de eliminación y confirma la retirada de recursos e imágenes antes de ocultar el proyecto. Debe estar activo para completar ambas operaciones; los logs quedan en `.local/deploy-worker.out.log` y `.local/deploy-worker.err.log`.
+
+Los cambios del frontend se reflejan automáticamente. Después de modificar el backend, las dependencias o cambiar de rama, reconstruir con:
+
+```powershell
+node scripts/start-local-kubero.mjs --build
+```
+
+`--build-backend` es actualmente un alias de `--build`: reconstruye también el frontend. Si cambian las dependencias de `scripts/`, repetir `npm ci --prefix scripts`.
+
+Para esta prueba usar el arranque normal, **sin `--without-worker`**. Esa opción permite entrar a Atlas sin iniciar el ejecutor; si no hay otro activo, las aprobaciones y eliminaciones quedan pendientes. Tampoco detiene un ejecutor que ya estuviera iniciado.
+
+## Desarrollo con Docker sin el laboratorio completo
+
+Los comandos de esta sección levantan la interfaz y la API por separado. Para probar el flujo de aprobación, despliegue y eliminación, utilizar el ejecutor de la sección anterior.
 
 Copiar `.env.example` a `.env`, configurar la GitHub App y ejecutar desde la raíz:
 
@@ -112,11 +160,11 @@ $env:ATLAS_TEST_REDIS_URL = 'redis://localhost:6379'
 cargo test --locked --test http_integration -- --ignored --nocapture
 ```
 
-La suite inicia el backend compilado, aplica migraciones y verifica HTTP, autenticación, permisos y adaptación. Limpia sus usuarios de prueba y detiene el servidor al terminar.
+La suite inicia el backend compilado, aplica migraciones y verifica HTTP, autenticación, permisos y aprobación administrativa sin una imagen previa. Limpia sus usuarios de prueba y detiene el servidor al terminar.
 
-Para incluir el cliente TypeScript, instalar antes sus dependencias con `npm ci` desde `frontend/`, disponer de Node y establecer `ATLAS_TEST_CLIENT=1`. Se ejecutará `frontend/tests/api.integration.cjs`, que inicia Vite y realiza peticiones reales a través de su proxy. El workflow `backend.yaml` prepara los servicios y ejecuta ambas integraciones automáticamente.
+Para incluir el cliente TypeScript, instalar antes sus dependencias con `npm ci` desde `frontend/`, disponer de Node y establecer `ATLAS_TEST_CLIENT=1`. Se ejecutará `frontend/tests/api.integration.cjs`, que inicia Vite y realiza peticiones reales a través de su proxy.
 
-La [arquitectura](docs/architecture.md) distingue la implementación del [flujo objetivo](<Project Flow.md>). La autenticación institucional, SSE y el ciclo de vida completo siguen pendientes.
+La autenticación institucional, SSE y el ciclo de vida completo siguen pendientes.
 
 ## GitHub y autenticación
 
@@ -128,7 +176,7 @@ Atlas consulta repositorios y ramas autorizados y resuelve automáticamente el �
 
 ## Laboratorio de despliegue
 
-El laboratorio utiliza K3s mediante k3d en Docker Desktop. Necesita Node 22 o posterior, kubectl y k3d. La instalación y el cambio desde Kind están en la [guía de migración](docs/k3s-migration.md). Desde la raíz:
+El laboratorio utiliza K3s mediante k3d en Docker Desktop. Los pasos de preparación y arranque están en [Trabajar en local con el ejecutor](#trabajar-en-local-con-el-ejecutor). Desde la raíz:
 
 ```sh
 npm ci --prefix scripts
@@ -136,7 +184,19 @@ node scripts/setup-k3s.mjs
 node scripts/start-local-kubero.mjs
 ```
 
-El script inicia o comprueba clúster y aplicación, configura `compose.kubero.yaml` y arranca el monitor. El monitor reclama proyectos en adaptación o aprobados mediante PostgreSQL. La adaptación inspecciona código y solicita una construcción a Kubero; el despliegue utiliza la imagen verificada, prepara servicios y comprueba la aplicación antes de marcarla como disponible.
+El script comprueba K3s y Kubero, y levanta frontend, API, PostgreSQL y Redis mediante `compose.yaml`, `compose.kubero.yaml` y `compose.dev.yaml`. El frontend de desarrollo se ejecuta dentro de Docker. `--build` reconstruye las imágenes y renueva el volumen de dependencias del frontend después de cambiar de rama. `--without-worker` permite comprobar el acceso a Atlas sin iniciar el monitor de despliegues.
+
+Al pulsar **Eliminar**, la API devuelve `202` y mantiene el proyecto visible mientras el ejecutor retira sus recursos de Kubero y Atlas, verifica su ausencia y elimina las versiones de su imagen del registro local y de la caché de K3s. Solo después lo marca como eliminado. Los errores quedan visibles y se puede reintentar; si el ejecutor está detenido, la solicitud queda pendiente. No se puede eliminar durante una construcción. Este flujo está disponible para el laboratorio `k3d-atlas`.
+
+La limpieza del registro suspende temporalmente sus escrituras para ejecutar la recolección de capas sin referencias. Las aplicaciones publicadas siguen atendiendo. Un bloqueo compartido impide solapar construcciones de Atlas y limpiezas. Para retirar una imagen de prueba sin proyecto, comprobando antes que no está referenciada:
+
+```sh
+node scripts/delete-local.mjs --image-repository native-check-680a4d70
+```
+
+Las solicitudes nuevas y los reenvíos quedan pendientes de validación administrativa. El administrador puede pedir correcciones o aprobar sin exigir una imagen construida previamente. El monitor solo reclama proyectos admitidos y aprobados; construye el Dockerfile del commit presentado, despliega la imagen mediante Kubero y comprueba su disponibilidad antes de marcar el proyecto como desplegado. Esta prueba requiere un Dockerfile en la raíz y no ejecuta empaquetado automático, CI ni transferencia del repositorio.
+
+Los fallos técnicos quedan en los logs del proyecto y permiten reintentar sin repetir la admisión. Guardar configuración durante las correcciones conserva las observaciones hasta que el estudiante reenvía la solicitud. La migración 008 devuelve a revisión las solicitudes que seguían esperando la adaptación del flujo anterior.
 
 Para diagnosticar un despliegue:
 
@@ -161,7 +221,7 @@ npm run build
 
 Las pruebas unitarias del cliente simulan respuestas HTTP. La integración ejecuta el cliente real a través del proxy Vite contra backend Rust y PostgreSQL aislados. Sus comandos están en la sección [Backend](#backend).
 
-Los tres workflows se ejecutan con cada push:
+Los workflows de CI están preparados localmente, pero su incorporación al repositorio sigue pendiente. Cubren:
 
 - `backend.yaml`: pruebas Rust, integración HTTP y del cliente con PostgreSQL/Redis temporales y compilación.
 - `frontend.yaml`: lint, pruebas unitarias, compilación TypeScript/Vite y artefacto del frontend.
@@ -171,9 +231,7 @@ Las pruebas de servicios y construcción con Kubernetes requieren infraestructur
 
 ## Modelo y seguimiento
 
-- [Arquitectura](docs/architecture.md): componentes y conexiones implementadas.
-- [Flujo del proyecto](<Project Flow.md>): pasos y estados del diseño objetivo, todavía en reconciliación.
-- [Actores y herramientas](Actors.md): responsabilidades de las herramientas de la plataforma.
+- [Actores](docs/Actors.md) y [flujo del proyecto](docs/project-flow.md): modelo objetivo; algunas etapas todavía no están implementadas en el laboratorio.
 - [Issues](https://github.com/djromerom/kubero-wrapper/issues): seguimiento de requisitos y trabajo pendiente.
 - [Requisitos funcionales](docs/requirements/functional.md) y [no funcionales](docs/requirements/non-functional.md): documentos en reconciliación con los issues.
 - [Segunda versión](https://github.com/djromerom/kubero-wrapper/issues/23): backlog V2 y propuesta de colaboradores.

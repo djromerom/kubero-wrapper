@@ -13,15 +13,15 @@ export default function SidebarNavigation({ collapsed }: { collapsed: boolean })
         {!collapsed && <span>Mis proyectos</span>}
       </NavLink>
       {isAdmin && (
-        <NavLink end to="/admin" aria-label="Clúster" title={collapsed ? 'Clúster' : undefined} className={navClass}>
-          <IconServer size={21} stroke={1.8} aria-hidden="true" className="shrink-0" />
-          {!collapsed && <span>Clúster</span>}
-        </NavLink>
-      )}
-      {isAdmin && (
         <NavLink to="/admin/projects" aria-label="Proyectos de la plataforma" title={collapsed ? 'Proyectos de la plataforma' : undefined} className={navClass}>
           <IconFolders size={21} stroke={1.8} aria-hidden="true" className="shrink-0" />
           {!collapsed && <span>Proyectos de la plataforma</span>}
+        </NavLink>
+      )}
+      {isAdmin && (
+        <NavLink end to="/admin" aria-label="Clúster" title={collapsed ? 'Clúster' : undefined} className={navClass}>
+          <IconServer size={21} stroke={1.8} aria-hidden="true" className="shrink-0" />
+          {!collapsed && <span>Clúster</span>}
         </NavLink>
       )}
     </nav>

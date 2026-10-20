@@ -13,7 +13,7 @@ export const projectStages: ProjectStage[] = [
   {
     id: 'validation',
     label: 'Validación',
-    statuses: ['adapting', 'pending', 'corrections'],
+    statuses: ['pending', 'corrections'],
     color: 'bg-amber-700',
     track: 'bg-amber-100',
     marker: 'border-amber-700 text-amber-700',
@@ -29,7 +29,7 @@ export const projectStages: ProjectStage[] = [
   {
     id: 'deploying',
     label: 'Desplegando',
-    statuses: ['ci_pending', 'building'],
+    statuses: ['building'],
     color: 'bg-sky-600',
     track: 'bg-sky-100',
     marker: 'border-sky-600 text-sky-700',

@@ -50,6 +50,11 @@ fn client() -> AppResult<reqwest::Client> {
         .map_err(|error| AppError::Internal(error.to_string()))
 }
 
+fn github_connection_error(error: reqwest::Error) -> AppError {
+    tracing::warn!(timeout = error.is_timeout(), connection = error.is_connect(), decoding = error.is_decode(), "GitHub request failed");
+    AppError::ServiceUnavailable("No se pudo completar la consulta a GitHub. Tus cambios no se han enviado; vuelve a intentarlo en unos momentos.".into())
+}
+
 fn ensure_configured(state: &AppState) -> AppResult<()> {
     if state.config.github_app_id.is_empty()
         || state.config.github_app_slug.is_empty()
@@ -278,7 +283,7 @@ async fn fetch_installations(http: &reqwest::Client, token: &str) -> AppResult<V
         .query(&[("per_page", "100")])
         .send()
         .await
-        .map_err(|error| AppError::Internal(error.to_string()))?;
+        .map_err(github_connection_error)?;
     if response.status() == StatusCode::UNAUTHORIZED {
         return Err(AppError::Unauthorized);
     }
@@ -288,7 +293,7 @@ async fn fetch_installations(http: &reqwest::Client, token: &str) -> AppResult<V
     let data: Value = response
         .json()
         .await
-        .map_err(|error| AppError::Internal(error.to_string()))?;
+        .map_err(github_connection_error)?;
     Ok(data
         .get("installations")
         .and_then(Value::as_array)
@@ -323,14 +328,14 @@ async fn repository_values(state: &AppState, account: &GitHubAccount) -> AppResu
             .query(&[("per_page", "100")])
             .send()
             .await
-            .map_err(|error| AppError::Internal(error.to_string()))?;
+            .map_err(github_connection_error)?;
         if !response.status().is_success() {
             continue;
         }
         let data: Value = response
             .json()
             .await
-            .map_err(|error| AppError::Internal(error.to_string()))?;
+            .map_err(github_connection_error)?;
         for repository in data
             .get("repositories")
             .and_then(Value::as_array)
@@ -390,14 +395,14 @@ pub(crate) async fn branches(
         .query(&[("per_page", "100")])
         .send()
         .await
-        .map_err(|error| AppError::Internal(error.to_string()))?;
+        .map_err(github_connection_error)?;
     if !response.status().is_success() {
         return Err(AppError::BadRequest("Unable to retrieve GitHub branches".into()));
     }
     let branches: Value = response
         .json()
         .await
-        .map_err(|error| AppError::Internal(error.to_string()))?;
+        .map_err(github_connection_error)?;
     Ok(Json(json!({ "owner": owner, "repository": repo, "branches": branches })))
 }
 
@@ -417,14 +422,14 @@ async fn latest_commit_value(
         .query(&[("sha", branch), ("per_page", "1")])
         .send()
         .await
-        .map_err(|error| AppError::Internal(error.to_string()))?;
+        .map_err(github_connection_error)?;
     if !response.status().is_success() {
         return Err(AppError::BadRequest("Unable to retrieve latest GitHub commit".into()));
     }
     response
         .json::<Vec<Value>>()
         .await
-        .map_err(|error| AppError::Internal(error.to_string()))?
+        .map_err(github_connection_error)?
         .into_iter()
         .next()
         .ok_or(AppError::NotFound)
@@ -488,4 +493,27 @@ pub(crate) async fn validate_project_source(
         .and_then(Value::as_str)
         .unwrap_or_default();
     Ok((sha.into(), message.into()))
+}
+
+#[cfg(test)]
+mod connection_tests {
+    use super::github_connection_error;
+    use axum::{body::to_bytes, http::StatusCode, response::IntoResponse};
+    use std::{net::TcpListener, time::Duration};
+
+    #[tokio::test]
+    async fn github_timeouts_return_a_retryable_message_without_connection_details() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let error = reqwest::Client::new().get(format!("http://{address}"))
+            .timeout(Duration::from_millis(50)).send().await.unwrap_err();
+        assert!(error.is_timeout());
+        let response = github_connection_error(error).into_response();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let bytes = to_bytes(response.into_body(), 2048).await.unwrap();
+        let body = String::from_utf8(bytes.to_vec()).unwrap();
+        assert!(body.contains("GitHub"));
+        assert!(body.contains("vuelve a intentarlo"));
+        assert!(!body.contains(&address.to_string()));
+    }
 }

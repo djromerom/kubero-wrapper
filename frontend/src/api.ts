@@ -15,7 +15,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || 'Request failed');
+    throw Object.assign(new Error(err.error || 'Request failed'), { status: res.status });
   }
   if (res.status === 204) return undefined as T;
   return res.json();
@@ -33,7 +33,12 @@ export interface AuthResponse {
   user: User;
 }
 
+export type CorrectionField = 'name' | 'repo_url' | 'branch' | 'purpose' | 'requested_subdomain' | 'course';
+export type ProjectCorrections = Partial<Record<CorrectionField, string>>;
+
 export interface Project {
+  deletion_requested_at?: string | null;
+  deletion_error?: string | null;
   id: string;
   name: string;
   slug: string;
@@ -44,9 +49,10 @@ export interface Project {
   purpose?: string | null;
   course?: string | null;
   review_note?: string | null;
+  correction_fields: CorrectionField[];
   source_commit?: string | null;
   adaptation_report?: {
-    outcome: string;
+    outcome?: string;
     summary?: string;
     commit?: string;
     platform?: string;
@@ -170,8 +176,8 @@ export interface GithubBranchesResponse {
   branches: GithubBranch[];
 }
 export const api = {
-  retryAdaptation: (id: string) =>
-    request<void>(`/projects/${id}/adaptation/retry`, { method: 'POST' }),
+  retryDeployment: (id: string) =>
+    request<void>(`/projects/${id}/deployment/retry`, { method: 'POST' }),
   health: () => request<{ status: string }>('/health'),
 
   register: (data: { email: string; password: string; name: string }) =>
@@ -197,10 +203,10 @@ export const api = {
   subdomainAvailability: (name: string) =>
     request<{ available: boolean }>(`/subdomains/availability?name=${encodeURIComponent(name)}`),
 
-  resubmitProject: (id: string, purpose: string) =>
+  resubmitProject: (id: string, corrections: ProjectCorrections) =>
     request<Project>(`/projects/${id}/resubmit`, {
       method: 'POST',
-      body: JSON.stringify({ purpose }),
+      body: JSON.stringify(corrections),
     }),
 
   getConfiguration: (id: string) =>
@@ -215,14 +221,14 @@ export const api = {
     id: string,
     decision: 'approve' | 'corrections',
     note?: string,
-    technicalCorrection = false
+    correctionFields?: CorrectionField[]
   ) =>
     request<Project>(`/admin/projects/${id}/review`, {
       method: 'POST',
-      body: JSON.stringify({ decision, note, technical_correction: technicalCorrection }),
+      body: JSON.stringify({ decision, note, correction_fields: correctionFields }),
     }),
 
-  deleteProject: (id: string) => request<void>(`/projects/${id}`, { method: 'DELETE' }),
+  deleteProject: (id: string) => request<{ deleted: boolean }>(`/projects/${id}`, { method: 'DELETE' }),
 
   listBuilds: (projectId: string) =>
     request<Build[]>(`/projects/${projectId}/builds`, { cache: 'no-store' }),

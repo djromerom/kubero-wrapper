@@ -104,7 +104,11 @@ Atlas disables its integrations and removes platform-specific credentials, secre
 
 The project remains in this state until Atlas confirms the transfer. Failed or incomplete transfers require a retry or administrative intervention; the repository is never deleted.
 
-After confirming the return, Atlas removes the project’s remaining exclusive resources, persistent data, and registry artifacts. Partial failures keep the case open until cleanup is verified.
+After confirming the return, the project moves to DELETING.
+### DELETING
+Atlas removes the project’s remaining exclusive resources from Kubero and Kubernetes, including workloads, networking configuration, services, secrets, and persistent data. It also removes the project’s images from the registry and node caches, and reclaims image layers that are no longer referenced. Resources or image layers still required by other projects or the platform are preserved.
+
+The project remains visible in Atlas while cleanup is in progress. Atlas verifies that the resources and images have been removed before going DELETED. Partial failures keep the project in DELETING, with the failed step and reason recorded, allowing cleanup to be retried without repeating completed steps or returning to PENDING_RETURN.
 ### DELETED
 Atlas has confirmed the repository’s return and the removal of the project’s resources and data. The application is no longer hosted by Atlas, and its repository remains in the authorized developer GitHub account.
 

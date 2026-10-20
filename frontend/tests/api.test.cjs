@@ -54,18 +54,32 @@ test('creation, corrections and review send their real API payloads', async () =
     requested_subdomain: 'project', purpose: 'Aplicación académica', course: 'Diseño Web II',
   };
   await api.createProject(project);
-  await api.resubmitProject('project-1', 'Propósito corregido');
-  await api.reviewProject('project-1', 'corrections', 'Revisar construcción', true);
+  await api.resubmitProject('project-1', { name: 'Proyecto corregido', purpose: 'Propósito corregido' });
+  await api.reviewProject('project-1', 'corrections', 'Revisar nombre y propósito', ['name', 'purpose']);
   assert.deepEqual(calls.map(call => [call.url, call.options.method]), [
     ['/api/projects', 'POST'],
     ['/api/projects/project-1/resubmit', 'POST'],
     ['/api/admin/projects/project-1/review', 'POST'],
   ]);
   assert.deepEqual(JSON.parse(calls[0].options.body), project);
-  assert.deepEqual(JSON.parse(calls[1].options.body), { purpose: 'Propósito corregido' });
+  assert.deepEqual(JSON.parse(calls[1].options.body), { name: 'Proyecto corregido', purpose: 'Propósito corregido' });
   assert.deepEqual(JSON.parse(calls[2].options.body), {
-    decision: 'corrections', note: 'Revisar construcción', technical_correction: true,
+    decision: 'corrections', note: 'Revisar nombre y propósito', correction_fields: ['name', 'purpose'],
   });
+});
+
+test('deployment retries use the deployment endpoint', async () => {
+  const calls = backend({});
+  await api.retryDeployment('project-1');
+  assert.equal(calls[0].url, '/api/projects/project-1/deployment/retry');
+  assert.equal(calls[0].options.method, 'POST');
+});
+
+test('deletion accepts the queue response without reporting completion', async () => {
+  const calls = backend({ deleted: false }, 202);
+  assert.deepEqual(await api.deleteProject('project-1'), { deleted: false });
+  assert.equal(calls[0].url, '/api/projects/project-1');
+  assert.equal(calls[0].options.method, 'DELETE');
 });
 
 test('GitHub and subdomain choices are fetched from the backend', async () => {

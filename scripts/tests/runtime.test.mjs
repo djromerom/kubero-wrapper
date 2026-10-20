@@ -61,7 +61,8 @@ test('monitor Node registra fallos y oculta secretos, incluso al dividirse entre
     } });
     const logs = await readFile(join(root, 'deployments', `${id}.log`), 'utf8');
     assert.ok(!logs.includes('secret-value') && !logs.includes('github-token'));
-    assert.ok(queries.some(q => q.includes("status='corrections'")));
+    assert.ok(queries.some(q => q.includes("status='failed'")));
+    assert.ok(!queries.some(q => q.includes("status='corrections'")));
     assert.ok(!queries.some(q => q.includes("status='running'")));
     assert.equal(protectLog('postgresql://user:password@host/db'), 'postgresql://user:[oculto]@host/db');
   } finally { await removeInside(tmpdir(), root); }

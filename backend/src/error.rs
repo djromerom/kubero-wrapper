@@ -24,6 +24,8 @@ pub enum AppError {
     Kube(#[from] kube::Error),
     #[error("Internal error: {0}")]
     Internal(String),
+    #[error("{0}")]
+    ServiceUnavailable(String),
 }
 
 impl IntoResponse for AppError {
@@ -34,6 +36,7 @@ impl IntoResponse for AppError {
             Self::Forbidden => (StatusCode::FORBIDDEN, self.to_string()),
             Self::BadRequest(_) => (StatusCode::BAD_REQUEST, self.to_string()),
             Self::Conflict(_) => (StatusCode::CONFLICT, self.to_string()),
+            Self::ServiceUnavailable(_) => (StatusCode::SERVICE_UNAVAILABLE, self.to_string()),
             _ => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".into()),
         };
 

@@ -39,8 +39,9 @@ export default function App() {
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/" element={protectedLayout}>
               <Route index element={<DashboardPage />} />
-              <Route path="documentacion" element={<DocumentationPage />} />
-              <Route path="como-desplegar" element={<Navigate to="/documentacion" replace />} />
+              <Route path="docs" element={<DocumentationPage />} />
+              <Route path="documentacion" element={<Navigate to="/docs" replace />} />
+              <Route path="como-desplegar" element={<Navigate to="/docs" replace />} />
               <Route path="projects/:id" element={<ProjectDetailPage />} />
               <Route path="admin" element={clusterPage} />
               <Route path="admin/projects" element={platformProjectsPage} />

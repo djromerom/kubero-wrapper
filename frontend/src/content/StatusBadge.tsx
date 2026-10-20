@@ -12,6 +12,7 @@ const colors: Record<string, string> = {
   ci_failed: 'bg-red-100 text-red-900',
   approved: 'bg-green-100 text-green-900',
   deleted: 'bg-atlas-mist text-atlas-muted',
+  deleting: 'bg-amber-100 text-amber-900',
 };
 
 export default function StatusBadge({ status }: Props) {
@@ -21,8 +22,7 @@ export default function StatusBadge({ status }: Props) {
         {
           adapting: 'En adaptación',
           pending: 'Validación pendiente',
-          building: 'CI en ejecución',
-          ci_pending: 'CI pendiente',
+          building: 'Construyendo y desplegando',
           corrections: 'Correcciones pendientes',
           retained: 'Retenido',
           recovery_pending: 'Recuperación pendiente',
@@ -34,6 +34,7 @@ export default function StatusBadge({ status }: Props) {
           running: 'Desplegado',
           failed: 'Despliegue fallido',
           deleted: 'Eliminado',
+          deleting: 'Eliminando',
         } as Record<string, string>
       )[status] || status}
     </span>

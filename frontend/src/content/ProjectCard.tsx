@@ -15,7 +15,7 @@ export default function ProjectCard({ project }: { project: Project }) {
     <article className="relative flex h-full flex-col rounded-xl border border-atlas-mist p-5 transition hover:border-atlas-ink">
       <Link to={`/projects/${project.id}`} aria-label={`Ver proyecto ${project.name}`} className="absolute inset-0 rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-atlas-red" />
       <div>
-        <StatusBadge status={project.status} />
+        <StatusBadge status={project.deletion_requested_at ? 'deleting' : project.status} />
       </div>
       <h3 className="mt-4 text-lg font-semibold">{project.name}</h3>
       <p className="mt-1 break-all text-xs text-atlas-muted">

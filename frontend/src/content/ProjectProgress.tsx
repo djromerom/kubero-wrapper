@@ -16,7 +16,7 @@ export default function ProjectProgress({
 }: Props) {
   return (
     <section aria-label="Proyectos por etapa" aria-busy={loading} className="overflow-x-auto py-4">
-      <ol className="flex min-w-[480px] gap-2">
+      <ol className="flex min-w-120 gap-2">
         {projectStages.map((stage) => {
           const count = projects.filter((project) =>
             stage.statuses.includes(project.status)

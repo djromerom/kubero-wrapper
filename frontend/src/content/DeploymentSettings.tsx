@@ -56,11 +56,12 @@ export default function DeploymentSettings({
           {!readOnly && (
             <>
               <p className="text-xs text-atlas-muted">
-                Guardar envía la configuración a revisión administrativa. El nuevo despliegue
-                comenzará después de la aprobación.
+                {['pending', 'corrections'].includes(status)
+                  ? 'Guardar actualiza la configuración de la solicitud. La construcción requiere aprobación administrativa.'
+                  : 'Guardar programa un nuevo despliegue. La admisión del proyecto ya fue aprobada.'}
               </p>
               <button disabled={locked || !valid || saving} className="rounded-lg bg-atlas-red px-4 py-2 text-sm text-white disabled:opacity-50">
-                {saving ? 'Guardando…' : 'Guardar y enviar a revisión'}
+                {saving ? 'Guardando…' : ['pending', 'corrections'].includes(status) ? 'Guardar configuración' : 'Guardar y desplegar'}
               </button>
             </>
           )}

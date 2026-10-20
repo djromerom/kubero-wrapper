@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, type RuntimeLog } from '../api';
+import LogOutput from '../shared/LogOutput';
 
 export default function RuntimeLogs({ id }: { id: string }) {
   const [open, setOpen] = useState(false);
@@ -56,9 +57,7 @@ export default function RuntimeLogs({ id }: { id: string }) {
           <summary className="cursor-pointer break-all text-sm">
             {entry.container} · {entry.pod}
           </summary>
-          <pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-atlas-mist p-3 text-xs">
-            {entry.logs}
-          </pre>
+          <LogOutput text={entry.logs} className="mt-2" />
         </details>
       ))}
     </details>

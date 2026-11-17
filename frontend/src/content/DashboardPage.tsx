@@ -50,7 +50,7 @@ export default function DashboardPage() {
     setSelectedStage((current) => (current === stage ? null : stage));
   }
   const refreshAfterCreation = () => {
-    showToast('Proyecto registrado. Comienza el proceso de adaptación.');
+    showToast('Proyecto registrado. Despliegue programado.');
     loadProjects();
   };
 

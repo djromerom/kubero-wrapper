@@ -1,31 +1,14 @@
 ## Registration
-Project registration, administrative admission and repository transfer to Openlab GitHub. After confirming the transfer, it follows the second stage: **Integration**.
+Each developer registers and deploys their own projects. After signing in, they link their GitHub account and select the repository, branch, project name, URL, description and optional course.
 
-After logging in to Atlas with Uninorte email, the user accesses the dashboard where they can click "New Project" button. This opens the registration form. The user must first link their GitHub account to Atlas, then select the repository and the subsequent fields (name, branch, desired url, description, course).
+Atlas checks repository access, resolves the current commit and records the project. Registration immediately queues deployment. The worker starts processing automatically, and the developer follows progress and logs from the project page.
 
-After finishing the form, the request is registered with the user, date, form information and last commit SHA.
-### PENDING_VALIDATION
-The administrator evaluates the request. They check the functionality, institutional connection and whether the application is useful.
+The current deployment queue uses the internal status `approved`, displayed as **En cola**, for compatibility with existing data. Saving deployment configuration or retrying a failed deployment queues another attempt.
 
-The administrator can request some fixes, going `PENDING_CORRECTIONS`, or accept the registration, going `REGISTRATION_APPROVED`.
-### PENDING_CORRECTIONS
-The administrator provides specific observations explaining the required corrections. These may involve clarifying the responsible user's institutional connection, explaining the purpose or benefit to the University, identifying the associated course or correcting the code to provide the described functionality.
+Account provisioning, project quotas and time-limited access are future configuration requirements. Google sign-in currently appears as a disabled frontend option.
 
-The user addresses the observations and resubmits the request. The project returns to `PENDING_VALIDATION`, with the updated information and latest commit SHA. Previous requests and decisions remain in the history. This cycle can be repeated without limit. There is no definitive rejection.
-### REGISTRATION_APPROVED
-Atlas records the approval and notifies the user that they must transfer the repository to OpenLab to continue.
+The following integration stages describe the target CI pipeline. The local implementation currently builds and deploys Compose or Dockerfile projects directly.
 
-Approval applies to the project’s initial admission. Future updates do not require another administrative review. Approval does not mean the application has passed technical checks or been deployed, just that Atlas accepted to host the user's application.
-
-The project then moves to `AWAITING_TRANSFER`.
-### AWAITING_TRANSFER
-Atlas provides a “Transfer repository to OpenLab” button to start the transfer and explains the implications before the user proceeds: OpenLab will own the repository on GitHub, the developer will retain access to maintain the application under the organization’s policies, and OpenLab will transfer it back to the developer’s account if the application leaves Atlas someday.
-
-The project remains in this state until Atlas confirms the transfer through GitHub. If the transfer fails or remains incomplete, Atlas informs the user and allows them to retry without losing approval.
-### SUCCESSFUL_TRANSFER
-Atlas confirms that OpenLab owns the expected repository, records its updated location and visibility, and verifies that the platform has the access required to continue.
-
-**Registration** is complete, and the project automatically moves to **Integration**.
 ## Integration
 CI provisioning based on visibility, application packaging, automated testing, security checks, and publication of the approved OCI image to the registry. After successful publication, the project moves to **Deployment**.
 ### CI_PROVISIONING

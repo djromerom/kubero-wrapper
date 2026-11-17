@@ -35,7 +35,7 @@ node scripts/setup-k3s.mjs
 node scripts/start-local-kubero.mjs --build
 ```
 
-La preparación crea el clúster local K3s dentro de Docker mediante k3d e instala Kubero y su registro de imágenes. El primer arranque puede tardar mientras descarga y construye las imágenes. Abrir [Atlas](http://localhost:5173), registrar una cuenta y vincular GitHub. Cada equipo tiene sus propios usuarios, proyectos, imágenes y clúster: estos datos y la carpeta `.local/` no se descargan con el repositorio. Para probar la aprobación también se necesita una cuenta con rol de administrador en esa base local.
+La preparación crea el clúster local K3s dentro de Docker mediante k3d e instala Kubero y su registro de imágenes. El primer arranque puede tardar mientras descarga y construye las imágenes. Abrir [Atlas](http://localhost:5173), registrar una cuenta y vincular GitHub. Cada equipo tiene sus propios usuarios, proyectos, imágenes y clúster: estos datos y la carpeta `.local/` no se descargan con el repositorio.
 
 ### Cada día
 
@@ -47,7 +47,7 @@ node scripts/start-local-kubero.mjs
 
 El comando inicia el clúster existente, comprueba Kubero, levanta frontend, API, PostgreSQL y Redis, y deja activo el **ejecutor** en segundo plano. No hace falta iniciar manualmente cada contenedor de k3d ni levantar primero `kubero-wrapper`.
 
-El ejecutor procesa los proyectos aprobados: despliega los servicios de su Docker Compose en K3s o construye el Dockerfile con Kubero cuando falta Compose. También procesa las solicitudes de eliminación y confirma la retirada de recursos e imágenes antes de ocultar el proyecto. Debe estar activo para completar ambas operaciones; los logs quedan en `.local/deploy-worker.out.log` y `.local/deploy-worker.err.log`.
+Al registrar un proyecto, el ejecutor procesa automáticamente su despliegue: despliega los servicios de su Docker Compose en K3s o construye el Dockerfile con Kubero cuando falta Compose. También procesa las solicitudes de eliminación y confirma la retirada de recursos e imágenes antes de ocultar el proyecto. Debe estar activo para completar ambas operaciones; los logs quedan en `.local/deploy-worker.out.log` y `.local/deploy-worker.err.log`.
 
 Los cambios del frontend se reflejan automáticamente. Después de modificar el backend, las dependencias o cambiar de rama, reconstruir con:
 
@@ -57,11 +57,11 @@ node scripts/start-local-kubero.mjs --build
 
 `--build-backend` es actualmente un alias de `--build`: reconstruye también el frontend. Si cambian las dependencias de `scripts/`, repetir `npm ci --prefix scripts`.
 
-Para esta prueba usar el arranque normal, **sin `--without-worker`**. Esa opción permite entrar a Atlas sin iniciar el ejecutor; si no hay otro activo, las aprobaciones y eliminaciones quedan pendientes. Tampoco detiene un ejecutor que ya estuviera iniciado.
+Para esta prueba usar el arranque normal, **sin `--without-worker`**. Esa opción permite entrar a Atlas sin iniciar el ejecutor; si no hay otro activo, los despliegues y eliminaciones quedan pendientes. Tampoco detiene un ejecutor que ya estuviera iniciado.
 
 ## Desarrollo con Docker sin el laboratorio completo
 
-Los comandos de esta sección levantan la interfaz y la API por separado. Para probar el flujo de aprobación, despliegue y eliminación, utilizar el ejecutor de la sección anterior.
+Los comandos de esta sección levantan la interfaz y la API por separado. Para probar el flujo de registro, despliegue y eliminación, utilizar el ejecutor de la sección anterior.
 
 Copiar `.env.example` a `.env`, configurar la GitHub App y ejecutar desde la raíz:
 
@@ -160,7 +160,7 @@ $env:ATLAS_TEST_REDIS_URL = 'redis://localhost:6379'
 cargo test --locked --test http_integration -- --ignored --nocapture
 ```
 
-La suite inicia el backend compilado, aplica migraciones y verifica HTTP, autenticación, permisos y aprobación administrativa sin una imagen previa. Limpia sus usuarios de prueba y detiene el servidor al terminar.
+La suite inicia el backend compilado, aplica migraciones y verifica HTTP, autenticación, permisos y entrada directa a la cola de despliegue. Limpia sus usuarios de prueba y detiene el servidor al terminar.
 
 Para incluir el cliente TypeScript, instalar antes sus dependencias con `npm ci` desde `frontend/`, disponer de Node y establecer `ATLAS_TEST_CLIENT=1`. Se ejecutará `frontend/tests/api.integration.cjs`, que inicia Vite y realiza peticiones reales a través de su proxy.
 
@@ -194,7 +194,7 @@ La limpieza del registro suspende temporalmente sus escrituras para ejecutar la 
 node scripts/delete-local.mjs --image-repository native-check-680a4d70
 ```
 
-Las solicitudes nuevas y los reenvíos quedan pendientes de validación administrativa. El administrador puede pedir correcciones o aprobar sin exigir una imagen construida previamente. El ejecutor trabaja con el commit aprobado y verifica la URL antes de marcar el proyecto como desplegado.
+Al pulsar **Registrar y desplegar**, Atlas valida el repositorio y su rama y pone el proyecto en la cola. El ejecutor inicia automáticamente la construcción y el despliegue del commit registrado. Atlas comprueba su URL antes de marcarlo como desplegado.
 
 #### Desplegar una página con Docker Compose
 
@@ -212,7 +212,7 @@ Incluye tu página en `public/index.html`. Atlas publica el puerto interno (80 e
 
 El ejecutor admite imágenes, construcciones con contexto del repositorio y Dockerfile, argumentos de construcción, variables del proyecto, puertos TCP, dependencias, comandos y volúmenes con nombre. Los archivos o directorios relativos montados se copian en modo de solo lectura (hasta 700 KB y 512 archivos por montaje). Usa un volumen con nombre para los datos que deban persistir. Para los secretos, configura las variables en Atlas y refiérelas desde Compose. Las opciones no admitidas, entre ellas montajes del host, ejecución privilegiada y redes externas, generan un error de despliegue.
 
-Los fallos técnicos quedan en los logs del proyecto y permiten reintentar sin repetir la admisión. Guardar configuración durante las correcciones conserva las observaciones hasta que el estudiante reenvía la solicitud. La migración 008 devuelve a revisión las solicitudes que seguían esperando la adaptación del flujo anterior.
+Los fallos técnicos quedan en los logs y permiten reintentar. **Guardar y desplegar** actualiza la configuración y programa la versión actual de la rama. La migración 012 lleva los antiguos proyectos pendientes con un commit válido a la cola y señala los que necesitan actualizar su fuente. El valor interno `approved` representa ahora «En cola», para mantener la compatibilidad con los registros existentes.
 
 Para diagnosticar un despliegue:
 

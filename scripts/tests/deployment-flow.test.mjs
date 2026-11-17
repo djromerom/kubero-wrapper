@@ -42,14 +42,14 @@ async function fixture(t, { dockerfile = true, compose, approvedImage = null, pr
   return { calls, dependencies: { db, k, fetcher, builder, settings: getClusterSettings({}) } };
 }
 
-test('una solicitud sin aprobación no descarga código ni inicia una construcción', async () => {
+test('un proyecto fuera de la cola no descarga código ni inicia una construcción', async () => {
   let touched = false;
   const unavailable = () => { touched = true; throw new Error('No debe ejecutarse'); };
-  await assert.rejects(deploy({ projectId: id }, { db: async () => '', k: unavailable, builder: unavailable, fetcher: unavailable }), /aprobado/);
+  await assert.rejects(deploy({ projectId: id }, { db: async () => '', k: unavailable, builder: unavailable, fetcher: unavailable }), /cola de despliegue/);
   assert.equal(touched, false);
 });
 
-test('después de aprobar se construye el Dockerfile del SHA presentado y se despliega esa imagen', async t => {
+test('al registrar se construye el Dockerfile del SHA presentado y se despliega esa imagen', async t => {
   const { calls, dependencies } = await fixture(t);
   await deploy({ projectId: id }, dependencies);
   assert.equal(calls.builds.length, 1);

@@ -1,4 +1,4 @@
-export type ProjectStageId = 'validation' | 'approval' | 'deploying' | 'deployed';
+export type ProjectStageId = 'queued' | 'failed' | 'deploying' | 'deployed';
 
 interface ProjectStage {
   id: ProjectStageId;
@@ -11,20 +11,20 @@ interface ProjectStage {
 
 export const projectStages: ProjectStage[] = [
   {
-    id: 'validation',
-    label: 'Validación',
-    statuses: ['pending', 'corrections'],
-    color: 'bg-amber-700',
-    track: 'bg-amber-100',
-    marker: 'border-amber-700 text-amber-700',
-  },
-  {
-    id: 'approval',
-    label: 'Aprobación',
-    statuses: ['approved'],
+    id: 'queued',
+    label: 'En cola',
+    statuses: ['pending', 'approved', 'adapting'],
     color: 'bg-violet-600',
     track: 'bg-violet-100',
     marker: 'border-violet-600 text-violet-700',
+  },
+  {
+    id: 'failed',
+    label: 'Requieren atención',
+    statuses: ['failed', 'corrections'],
+    color: 'bg-amber-700',
+    track: 'bg-amber-100',
+    marker: 'border-amber-700 text-amber-700',
   },
   {
     id: 'deploying',

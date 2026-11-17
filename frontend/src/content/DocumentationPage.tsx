@@ -4,7 +4,7 @@ import StatusBadge from './StatusBadge';
 
 const sections = [
   ['preparacion', 'Antes de empezar'],
-  ['solicitud', 'Solicitud y revisión'],
+  ['solicitud', 'Registro y despliegue'],
   ['estados', 'Estados del proyecto'],
   ['despliegue', 'Builds, imágenes y logs'],
   ['acceso', 'Acceso a la aplicación'],
@@ -19,26 +19,18 @@ const steps = [
   },
   {
     title: 'Registra tu proyecto',
-    description: 'Pulsa «Nuevo proyecto», selecciona el repositorio y su rama, y completa el nombre, la descripción, la URL propuesta y la asignatura, si corresponde. Atlas registra el commit de esa rama que se presentará a revisión.',
-  },
-  {
-    title: 'Espera la revisión administrativa',
-    description: 'El administrador puede aprobar la solicitud o seleccionar los campos que debes corregir y acompañarlos de observaciones. Esta revisión todavía no construye ni despliega la aplicación.',
-  },
-  {
-    title: 'Corrige los campos solicitados',
-    description: 'En el detalle encontrarás las observaciones y los campos habilitados para corregir. Al pulsar «Enviar a validación», la solicitud vuelve a revisión. Si cambias el repositorio o la rama, Atlas consulta su commit actual.',
+    description: 'Pulsa «Nuevo proyecto», selecciona el repositorio y su rama, y completa el nombre, la descripción, la URL propuesta y la asignatura, si corresponde. Atlas registra el commit de esa rama que se desplegará.',
   },
   {
     title: 'Sigue la construcción y el despliegue',
-    description: 'Tras la aprobación, Atlas despliega los servicios del archivo Compose del commit registrado. Si falta ese archivo, construye el Dockerfile con Kubero. Atlas comprueba que responda antes de marcarla como desplegada.',
+    description: 'Al registrar el proyecto, Atlas despliega los servicios del archivo Compose del commit registrado. Si falta ese archivo, construye el Dockerfile con Kubero. Atlas comprueba que responda antes de marcarla como desplegada.',
   },
 ];
 
 const statuses = [
-  ['pending', 'La solicitud espera revisión del administrador. La aplicación aún no se ha construido.'],
+  ['pending', 'El proyecto está en la cola de despliegue.'],
   ['corrections', 'Debes atender las observaciones y reenviar los campos indicados.'],
-  ['approved', 'La solicitud ya está aprobada; falta que el ejecutor comience a procesarla.'],
+  ['approved', 'El ejecutor iniciará automáticamente la construcción y el despliegue.'],
   ['building', 'Se está construyendo la imagen o preparando y verificando su despliegue.'],
   ['running', 'La aplicación respondió correctamente por su URL al finalizar el despliegue.'],
   ['failed', 'Falló la construcción o el despliegue. Revisa los logs para identificar la causa.'],
@@ -78,7 +70,7 @@ export default function DocumentationPage() {
       </section>
 
       <section id="solicitud" aria-labelledby="solicitud-title" className="scroll-mt-6">
-        <h2 id="solicitud-title" className="text-xl font-semibold">Solicitud y revisión</h2>
+        <h2 id="solicitud-title" className="text-xl font-semibold">Registro y despliegue</h2>
         <ol className="mt-5 space-y-6">
           {steps.map(({ title, description }, index) => (
             <li key={title} className="flex gap-4">
@@ -94,7 +86,7 @@ export default function DocumentationPage() {
 
       <section id="estados" aria-labelledby="estados-title" className="scroll-mt-6">
         <h2 id="estados-title" className="text-xl font-semibold">Estados del proyecto</h2>
-        <p className="mt-3 text-sm leading-relaxed text-atlas-muted">En la barra, «Validación» agrupa las solicitudes pendientes y las correcciones. «Aprobación» significa que la solicitud ya está aprobada y espera al ejecutor. Al seleccionar una etapa, se filtran las tarjetas de proyectos.</p>
+        <p className="mt-3 text-sm leading-relaxed text-atlas-muted">En la barra, «En cola» agrupa los proyectos que esperan al ejecutor y «Requieren atención» muestra los intentos fallidos. Al seleccionar una etapa, se filtran las tarjetas de proyectos.</p>
         <div className="mt-4 overflow-x-auto rounded-xl border border-atlas-mist">
           <table className="w-full text-left text-sm">
             <caption className="sr-only">Estados que puedes encontrar en Atlas y su significado</caption>
@@ -118,13 +110,13 @@ export default function DocumentationPage() {
         <p className="text-sm leading-relaxed text-atlas-muted">Un build es un intento de construcción y despliegue. Cada servicio Compose puede usar una imagen publicada o construir la suya desde el repositorio. Una imagen puede haberse construido correctamente y fallar después al arrancar.</p>
         <p className="text-sm leading-relaxed text-atlas-muted">En «Builds», el intento más reciente lleva «(actual)» junto al código del commit. Esa marca identifica el último intento, aunque haya fallado. Solo se puede abrir un log a la vez, y el icono a la derecha del badge copia su contenido.</p>
         <p className="text-sm leading-relaxed text-atlas-muted">Los logs de construcción explican cómo se creó la imagen y qué pasó al desplegarla. Los «Logs de aplicación y servicios» muestran la salida de los contenedores y se actualizan mientras el panel está abierto.</p>
-        <p className="text-sm leading-relaxed text-atlas-muted">Si el despliegue falla, corrige la causa indicada en los logs. Cuando necesites cambiar el código, el Compose o el Dockerfile, haz commit y push. Después pulsa «Reintentar con la versión actual de la rama»: Atlas consulta ese commit y vuelve a procesar el proyecto sin repetir la aprobación administrativa.</p>
+        <p className="text-sm leading-relaxed text-atlas-muted">Si el despliegue falla, corrige la causa indicada en los logs. Cuando necesites cambiar el código, el Compose o el Dockerfile, haz commit y push. Después pulsa «Reintentar con la versión actual de la rama»: Atlas consulta ese commit y vuelve a procesar el proyecto automáticamente.</p>
         <p className="text-sm leading-relaxed text-atlas-muted">Pueden quedar imágenes de intentos anteriores almacenadas aunque solo se ejecute una versión. Esas imágenes ocupan disco; tenerlas guardadas no equivale a tener varias aplicaciones funcionando.</p>
       </section>
 
       <section id="acceso" aria-labelledby="acceso-title" className="scroll-mt-6 space-y-4">
         <h2 id="acceso-title" className="text-xl font-semibold">Acceso a la aplicación</h2>
-        <p className="text-sm leading-relaxed text-atlas-muted">Cuando el proyecto esté desplegado, abre el enlace de su tarjeta o de su detalle. Durante la revisión, la URL propuesta está reservada, pero todavía no publica una aplicación.</p>
+        <p className="text-sm leading-relaxed text-atlas-muted">Cuando el proyecto esté desplegado, abre el enlace de su tarjeta o de su detalle. Mientras espera el despliegue, la URL propuesta está reservada, pero todavía no publica una aplicación.</p>
         <p className="text-sm leading-relaxed text-atlas-muted">En este laboratorio, una dirección como <code className="break-all text-atlas-ink">crono.app.127.0.0.1.sslip.io</code> apunta a la computadora desde la que se abre. sslip.io resuelve el nombre a <code className="text-atlas-ink">127.0.0.1</code>, y Traefik dirige la petición al proyecto según el nombre solicitado. Así varios proyectos comparten la misma IP y puerto de entrada.</p>
         <p className="text-sm leading-relaxed text-atlas-muted">Esa dirección permite probar la aplicación en el equipo que ejecuta Atlas; compartirla con otra persona no le da acceso a tu computadora. Los clústeres reales usarán el dominio y la dirección de entrada que se asignen.</p>
       </section>
@@ -143,7 +135,7 @@ export default function DocumentationPage() {
 
       <section id="alcance" aria-labelledby="alcance-title" className="scroll-mt-6 rounded-xl bg-atlas-mist p-5">
         <h2 id="alcance-title" className="text-xl font-semibold">Alcance actual</h2>
-        <p className="mt-3 text-sm leading-relaxed text-atlas-muted">Esta versión utiliza una cuenta local de Atlas, vinculación de GitHub, revisión administrativa, despliegue desde Compose o Dockerfile sobre K3s.</p>
+        <p className="mt-3 text-sm leading-relaxed text-atlas-muted">Esta versión utiliza una cuenta local de Atlas, vinculación de GitHub y despliegue automático desde Compose o Dockerfile sobre K3s.</p>
         <ul className="mt-4 list-disc space-y-2 pl-5 text-sm leading-relaxed text-atlas-muted">
           <li>Un push a GitHub todavía no actualiza automáticamente una aplicación desplegada. La actualización de proyectos desplegados queda pendiente.</li>
           <li>Todavía no se ejecutan CI de los proyectos ni empaquetado automático.</li>

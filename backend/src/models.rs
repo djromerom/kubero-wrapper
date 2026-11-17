@@ -217,19 +217,6 @@ pub struct SubdomainAvailability {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct ReviewProjectRequest {
-    pub decision: String,
-    #[serde(default, alias = "text")]
-    pub note: Option<String>,
-    #[serde(default)]
-    pub correction_fields: Vec<String>,
-}
-
-pub const PROJECT_CORRECTION_FIELDS: [&str; 6] = [
-    "name", "repo_url", "branch", "purpose", "requested_subdomain", "course",
-];
-
-#[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ResubmitProjectRequest {
     pub name: Option<String>,

@@ -24,11 +24,11 @@ export function approvedImageMatches(record, sha, platform) {
 export async function deploy({ projectId, containerPort = 3000 }, { db = database, settings = getClusterSettings(), k = kube(settings.Context), builder = buildImage, composeRunner = deployCompose, fetcher = fetch } = {}) {
   projectId = validateProjectId(projectId);
   if (!Number.isInteger(containerPort) || containerPort < 1 || containerPort > 65535) throw new Error('El puerto debe estar entre 1 y 65535.');
-  const recordText = await db(`SELECT json_build_object('id',p.id,'slug',p.slug,'kubero_pipeline',p.kubero_pipeline,'requested_subdomain',p.requested_subdomain,'repo_url',p.repo_url,'branch',p.branch,'deployment_config',p.deployment_config,'source_commit',p.source_commit,'adaptation_report',p.adaptation_report,'approved_image',p.approved_image,'access_token',ga.access_token) FROM projects p JOIN github_accounts ga ON ga.user_id=p.user_id WHERE p.id=${q(projectId)}::uuid AND p.status IN ('approved','building') AND p.registration_approved_at IS NOT NULL LIMIT 1;`);
-  if (!recordText) throw new Error('El proyecto debe estar aprobado y tener GitHub vinculado antes de construirlo.');
+  const recordText = await db(`SELECT json_build_object('id',p.id,'slug',p.slug,'kubero_pipeline',p.kubero_pipeline,'requested_subdomain',p.requested_subdomain,'repo_url',p.repo_url,'branch',p.branch,'deployment_config',p.deployment_config,'source_commit',p.source_commit,'adaptation_report',p.adaptation_report,'approved_image',p.approved_image,'access_token',ga.access_token) FROM projects p JOIN github_accounts ga ON ga.user_id=p.user_id WHERE p.id=${q(projectId)}::uuid AND p.status IN ('approved','building') AND p.deletion_requested_at IS NULL LIMIT 1;`);
+  if (!recordText) throw new Error('El proyecto debe estar en la cola de despliegue y tener GitHub vinculado.');
   const record = JSON.parse(recordText), match = /^https:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)$/.exec(record.repo_url);
   if (!/^[a-z0-9][a-z0-9-]*$/.test(record.slug) || !match) throw new Error('El nombre o repositorio guardado no tiene el formato esperado.');
-  if (!/^[a-f0-9]{40}$/i.test(record.source_commit || '')) throw new Error('La solicitud aprobada no tiene un commit válido.');
+  if (!/^[a-f0-9]{40}$/i.test(record.source_commit || '')) throw new Error('El proyecto registrado no tiene un commit válido.');
   await k(['get', 'crd', 'kuberoapps.application.kubero.dev']);
   const [, owner, repository] = match, slug = record.slug;
   const workRoot = join(repoRoot, '.local', 'work');
@@ -41,7 +41,7 @@ export async function deploy({ projectId, containerPort = 3000 }, { db = databas
     const response = await fetcher(`${base}/commits/${record.source_commit}`, { headers, signal: AbortSignal.timeout(30_000) });
     if (!response.ok) throw new Error(`GitHub no pudo resolver el commit (${response.status}).`);
     sha = (await response.json()).sha;
-    if (sha !== record.source_commit) throw new Error('GitHub no devolvió el commit de la solicitud aprobada.');
+    if (sha !== record.source_commit) throw new Error('GitHub no devolvió el commit del proyecto registrado.');
     const archive = await fetcher(`${base}/tarball/${sha}`, { headers, signal: AbortSignal.timeout(120_000) });
     if (!archive.ok) throw new Error(`GitHub no pudo entregar el código (${archive.status}).`);
     const archivePath = join(workDir, 'source.tar.gz'), sourceDir = join(workDir, 'source');
@@ -69,7 +69,7 @@ export async function deploy({ projectId, containerPort = 3000 }, { db = databas
     } else {
       const dockerfile = existsSync(join(sourceDir, 'Dockerfile')) ? 'Dockerfile' : existsSync(join(sourceDir, 'dockerfile')) ? 'dockerfile' : '';
       if (!dockerfile) throw new Error('El proyecto requiere un Dockerfile o un archivo Compose en la raíz.');
-      report = { version: 1, commit: sha, platform: settings.Platform, engine: 'kubero', build_strategy: 'Kubero / dockerfile', port, build_verified: false, runtime_verified: false, blockers: [], changes: ['Kubero construye el Dockerfile del commit aprobado.'] };
+      report = { version: 1, commit: sha, platform: settings.Platform, engine: 'kubero', build_strategy: 'Kubero / dockerfile', port, build_verified: false, runtime_verified: false, blockers: [], changes: ['Kubero construye el Dockerfile del commit registrado.'] };
       configuration.port = port;
       const reusing = approvedImageMatches(record, sha, settings.Platform);
       let image = record.approved_image;
@@ -122,6 +122,6 @@ export async function deploy({ projectId, containerPort = 3000 }, { db = databas
 }
 
 cli(import.meta.url, 'node scripts/deploy-local.mjs --project-id UUID [--container-port 3000]', args => {
-  if (args['adapt-only']) throw new Error('La adaptación previa está desactivada. La construcción requiere aprobación administrativa.');
+  if (args['adapt-only']) throw new Error('La adaptación previa está desactivada. Registra el proyecto para iniciar su construcción.');
   return withClusterMutation(() => deploy({ projectId: args['project-id'], containerPort: Number(args['container-port'] || 3000) }));
 });

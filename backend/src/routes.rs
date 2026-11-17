@@ -68,7 +68,6 @@ pub fn create_router(state: AppState) -> Router {
 
     let admin_routes = Router::new()
         .route("/api/admin/projects", get(admin_list_projects))
-        .route("/api/admin/projects/:id/review", post(admin_review_project).patch(admin_review_project))
         .route("/api/admin/projects/:id", delete(admin_delete_project))
         .route("/api/admin/cluster", get(cluster_status))
         .route_layer(middleware::from_fn(auth::admin_middleware))
@@ -237,7 +236,7 @@ async fn create_project(
         }
         let project = sqlx::query_as::<_, Project>(
             "INSERT INTO projects (id, user_id, name, slug, repo_url, branch, requested_subdomain, purpose, course, deployment_config, source_commit, status) \
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, 'pending') ON CONFLICT DO NOTHING \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, 'approved') ON CONFLICT DO NOTHING \
              RETURNING id, user_id, name, slug, repo_url, branch, status::text AS status, \
              requested_subdomain, purpose, course, review_note, correction_fields, source_commit, adaptation_report, approved_image, domain, webhook_secret, kubero_pipeline, kubero_app, deletion_requested_at, deletion_error, created_at, updated_at",
         )
@@ -312,17 +311,16 @@ async fn save_project_configuration(
     if !state.config.local_image_deployment {
         return Err(AppError::BadRequest("Esta configuración requiere el ejecutor local de Atlas.".into()));
     }
-    let (repo, branch, status, admitted) = sqlx::query_as::<_, (String, String, String, bool)>(
-        "SELECT repo_url, branch, status::text, registration_approved_at IS NOT NULL FROM projects \
-         WHERE id=$1 AND user_id=$2 AND status IN ('pending','corrections','failed','running')"
+    let (repo, branch) = sqlx::query_as::<_, (String, String)>(
+        "SELECT repo_url, branch FROM projects \
+         WHERE id=$1 AND user_id=$2 AND deletion_requested_at IS NULL AND status IN ('pending','corrections','failed','running')"
     ).bind(id).bind(user.id).fetch_optional(&state.db).await?.ok_or(AppError::NotFound)?;
     let (sha, _) = github::validate_project_source(&state, user.id, &repo, &branch).await?;
     let raw = serde_json::to_string(&config).map_err(|e| AppError::Internal(e.to_string()))?;
-    let next_status = if admitted { "approved" } else if status == "corrections" { "corrections" } else { "pending" };
     let result = sqlx::query(
-        "UPDATE projects SET source_commit=$4, deployment_config=$1::jsonb, status=$5::project_status, adaptation_claimed_at=NULL, adaptation_report=NULL, approved_image=NULL, updated_at=NOW() \
-         WHERE id=$2 AND user_id=$3 AND status IN ('pending','corrections','failed','running')",
-    ).bind(raw).bind(id).bind(user.id).bind(sha).bind(next_status).execute(&state.db).await?;
+        "UPDATE projects SET source_commit=$4, deployment_config=$1::jsonb, status='approved', review_note=NULL, correction_fields='{}', adaptation_claimed_at=NULL, adaptation_report=NULL, approved_image=NULL, updated_at=NOW() \
+         WHERE id=$2 AND user_id=$3 AND deletion_requested_at IS NULL AND status IN ('pending','corrections','failed','running')",
+    ).bind(raw).bind(id).bind(user.id).bind(sha).execute(&state.db).await?;
     if result.rows_affected() == 0 {
         return Err(AppError::Conflict("No puedes modificar este proyecto mientras espera al ejecutor o se está construyendo.".into()));
     }
@@ -371,18 +369,15 @@ async fn request_project_deletion(state: &AppState, id: Uuid, user: &AuthUser) -
 async fn retry_deployment(
     State(state): State<AppState>, Extension(user): Extension<AuthUser>, Path(id): Path<Uuid>,
 ) -> AppResult<StatusCode> {
-    let (repo, branch, owner, admitted) = sqlx::query_as::<_, (String, String, Uuid, bool)>(
-        "SELECT repo_url, branch, user_id, registration_approved_at IS NOT NULL FROM projects \
-         WHERE id=$1 AND (user_id=$2 OR $3) AND status='failed'"
+    let (repo, branch, owner) = sqlx::query_as::<_, (String, String, Uuid)>(
+        "SELECT repo_url, branch, user_id FROM projects \
+         WHERE id=$1 AND (user_id=$2 OR $3) AND deletion_requested_at IS NULL AND status='failed'"
     ).bind(id).bind(user.id).bind(user.role == "admin").fetch_optional(&state.db).await?.ok_or(AppError::NotFound)?;
-    if !admitted {
-        return Err(AppError::Conflict("La solicitud necesita aprobación administrativa antes de desplegarse.".into()));
-    }
     let (sha, _) = github::validate_project_source(&state, owner, &repo, &branch).await?;
     let result = sqlx::query("UPDATE projects SET status='approved', adaptation_claimed_at=NULL, \
         adaptation_report=CASE WHEN source_commit=$2 THEN adaptation_report ELSE NULL END, \
         approved_image=CASE WHEN source_commit=$2 THEN approved_image ELSE NULL END, source_commit=$2, updated_at=NOW() \
-        WHERE id=$1 AND status='failed' AND registration_approved_at IS NOT NULL")
+        WHERE id=$1 AND deletion_requested_at IS NULL AND status='failed'")
         .bind(id).bind(sha).execute(&state.db).await?;
     if result.rows_affected() == 0 { return Err(AppError::Conflict("El proyecto cambió mientras se solicitaba el despliegue.".into())); }
     Ok(StatusCode::NO_CONTENT)
@@ -438,10 +433,10 @@ async fn resubmit_project(
         _ => github::validate_project_source(&state, auth_user.id, repo, branch).await?.0,
     };
     let project = sqlx::query_as::<_, Project>(
-        "UPDATE projects SET status='pending', adaptation_claimed_at=NULL, source_commit=$4, \
+        "UPDATE projects SET status='approved', adaptation_claimed_at=NULL, source_commit=$4, \
          adaptation_report=NULL, approved_image=NULL, purpose=$1, name=$5, repo_url=$6, branch=$7, \
          requested_subdomain=$8, course=$9, review_note=NULL, correction_fields='{}', updated_at=NOW() \
-         WHERE id = $2 AND user_id = $3 AND status = 'corrections' AND updated_at=$10 \
+         WHERE id = $2 AND user_id = $3 AND deletion_requested_at IS NULL AND status = 'corrections' AND updated_at=$10 \
          RETURNING id, user_id, name, slug, repo_url, branch, status::text AS status, \
          requested_subdomain, purpose, course, review_note, correction_fields, source_commit, adaptation_report, approved_image, domain, webhook_secret, kubero_pipeline, kubero_app, deletion_requested_at, deletion_error, created_at, updated_at",
     )
@@ -462,67 +457,6 @@ async fn resubmit_project(
         } else { AppError::from(error) }
     })?
     .ok_or_else(|| AppError::Conflict("La solicitud cambió mientras se enviaban las correcciones. Recarga el proyecto.".into()))?;
-    Ok(Json(project.into()))
-}
-
-async fn admin_review_project(
-    State(state): State<AppState>,
-    Path(id): Path<Uuid>,
-    Json(req): Json<ReviewProjectRequest>,
-) -> AppResult<Json<ProjectResponse>> {
-    let (status, note) = match req.decision.as_str() {
-        "approve" => ("approved", None),
-        "corrections" => {
-            let note = req.note.as_deref().unwrap_or("").trim();
-            if note.is_empty() {
-                return Err(AppError::BadRequest("Explica las correcciones necesarias.".into()));
-            }
-            if req.correction_fields.is_empty()
-                || req.correction_fields.iter().any(|field| !PROJECT_CORRECTION_FIELDS.contains(&field.as_str()))
-                || req.correction_fields.iter().collect::<std::collections::HashSet<_>>().len() != req.correction_fields.len() {
-                return Err(AppError::BadRequest("Selecciona uno o varios campos válidos para corregir, sin repetirlos.".into()));
-            }
-            ("corrections", Some(note))
-        }
-        _ => return Err(AppError::BadRequest("Decisión no válida.".into())),
-    };
-    if status == "approved" && !req.correction_fields.is_empty() {
-        return Err(AppError::BadRequest("Una aprobación no puede solicitar correcciones.".into()));
-    }
-    let mut tx = state.db.begin().await?;
-    let pending = sqlx::query_as::<_, Project>(
-        "SELECT id, user_id, name, slug, repo_url, branch, status::text AS status, \
-         requested_subdomain, purpose, course, review_note, correction_fields, source_commit, adaptation_report, approved_image, domain, webhook_secret, kubero_pipeline, kubero_app, deletion_requested_at, deletion_error, created_at, updated_at \
-         FROM projects WHERE id = $1 AND status = 'pending' FOR UPDATE",
-    ).bind(id).fetch_optional(&mut *tx).await?
-        .ok_or_else(|| AppError::Conflict("Esta solicitud ya no está pendiente.".into()))?;
-    if req.decision == "approve" {
-        let pinned = pending.source_commit.as_deref()
-            .is_some_and(|sha| sha.len() == 40 && sha.bytes().all(|byte| byte.is_ascii_hexdigit()));
-        if !pinned {
-            return Err(AppError::Conflict("La solicitud no tiene un commit válido. El desarrollador debe actualizarla y reenviarla.".into()));
-        }
-    }
-    let project = sqlx::query_as::<_, Project>(
-        "UPDATE projects SET status=$1::project_status, review_note=$2, correction_fields=$4, \
-         registration_approved_at=CASE WHEN $1='approved' THEN COALESCE(registration_approved_at,NOW()) ELSE registration_approved_at END, \
-         adaptation_report=NULL, approved_image=NULL, updated_at=NOW() \
-         WHERE id = $3 AND status = 'pending' \
-         RETURNING id, user_id, name, slug, repo_url, branch, status::text AS status, \
-         requested_subdomain, purpose, course, review_note, correction_fields, source_commit, adaptation_report, approved_image, domain, webhook_secret, kubero_pipeline, kubero_app, deletion_requested_at, deletion_error, created_at, updated_at",
-    )
-    .bind(status)
-    .bind(note)
-    .bind(id)
-    .bind(&req.correction_fields)
-    .fetch_optional(&mut *tx)
-    .await?
-    .ok_or_else(|| AppError::Conflict("Esta solicitud ya no está pendiente.".into()))?;
-    tx.commit().await?;
-    state.event_bus.publish(if req.decision == "approve" { "project.approved" } else { "project.corrections_requested" }, &json!({
-        "project_id": project.id, "user_id": project.user_id, "slug": project.slug, "correction_text": note,
-        "correction_fields": project.correction_fields,
-    })).await;
     Ok(Json(project.into()))
 }
 

@@ -217,17 +217,6 @@ export const api = {
   saveConfiguration: (id: string, config: DeploymentConfig) =>
     request<void>(`/projects/${id}/configuration`, { method: 'PUT', body: JSON.stringify(config) }),
 
-  reviewProject: (
-    id: string,
-    decision: 'approve' | 'corrections',
-    note?: string,
-    correctionFields?: CorrectionField[]
-  ) =>
-    request<Project>(`/admin/projects/${id}/review`, {
-      method: 'POST',
-      body: JSON.stringify({ decision, note, correction_fields: correctionFields }),
-    }),
-
   deleteProject: (id: string) => request<{ deleted: boolean }>(`/projects/${id}`, { method: 'DELETE' }),
 
   listBuilds: (projectId: string) =>

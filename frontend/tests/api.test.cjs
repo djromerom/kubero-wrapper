@@ -47,7 +47,7 @@ test('project lists and details use the authenticated backend', async () => {
   }
 });
 
-test('creation, corrections and review send their real API payloads', async () => {
+test('creation and legacy corrections send their real API payloads', async () => {
   const calls = backend({ id: 'project-1' });
   const project = {
     name: 'Proyecto', repo_url: 'https://github.com/owner/project', branch: 'main',
@@ -55,17 +55,13 @@ test('creation, corrections and review send their real API payloads', async () =
   };
   await api.createProject(project);
   await api.resubmitProject('project-1', { name: 'Proyecto corregido', purpose: 'Propósito corregido' });
-  await api.reviewProject('project-1', 'corrections', 'Revisar nombre y propósito', ['name', 'purpose']);
   assert.deepEqual(calls.map(call => [call.url, call.options.method]), [
     ['/api/projects', 'POST'],
     ['/api/projects/project-1/resubmit', 'POST'],
-    ['/api/admin/projects/project-1/review', 'POST'],
   ]);
   assert.deepEqual(JSON.parse(calls[0].options.body), project);
   assert.deepEqual(JSON.parse(calls[1].options.body), { name: 'Proyecto corregido', purpose: 'Propósito corregido' });
-  assert.deepEqual(JSON.parse(calls[2].options.body), {
-    decision: 'corrections', note: 'Revisar nombre y propósito', correction_fields: ['name', 'purpose'],
-  });
+
 });
 
 test('deployment retries use the deployment endpoint', async () => {

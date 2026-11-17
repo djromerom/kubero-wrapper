@@ -281,8 +281,7 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
             Nuevo proyecto
           </h2>
           <p className="text-sm text-atlas-muted">
-            Registra tu repositorio y envíalo a revisión. Todavía no se iniciará la integración ni
-            el despliegue.
+            Registra tu repositorio para iniciar automáticamente la construcción y el despliegue.
           </p>
         </header>
         <ol className="relative flex items-center justify-between gap-2 border-b border-atlas-mist px-6 py-5 before:absolute before:inset-x-8 before:top-1/2 before:h-px before:bg-atlas-red before:content-[''] max-[480px]:gap-[.2rem] max-[480px]:px-3" aria-label="Pasos de registro">
@@ -382,7 +381,7 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
             </button>
           )}
           <button type="submit" disabled={sending || githubLinked !== true || loadingGithub} className="inline-flex items-center gap-2 rounded-lg bg-atlas-red px-4 py-2 text-sm text-white hover:bg-atlas-ink disabled:opacity-50">
-            {sending ? 'Enviando…' : step === 3 ? 'Enviar solicitud' : 'Siguiente'}
+            {sending ? 'Enviando…' : step === 3 ? 'Registrar y desplegar' : 'Siguiente'}
             {step < 3 && <IconChevronRight size={16} stroke={2} aria-hidden="true" />}
           </button>
         </footer>

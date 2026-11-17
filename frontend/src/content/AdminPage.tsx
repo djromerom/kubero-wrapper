@@ -1,24 +1,13 @@
 import { fieldClassName, fieldLabelClassName, controlClassName } from '../shared/formStyles';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { api, type CorrectionField, type Project } from '../api';
+import { api, type Project } from '../api';
 import ProjectCard from './ProjectCard';
-import { useToast } from '../shared/ToastProvider';
-import CustomSelect from './CustomSelect';
-import { correctionFieldOptions } from './correctionFields';
 
 export default function AdminPage() {
-  const toast = useToast();
   const [projects, setProjects] = useState<Project[]>([]);
   const [filter, setFilter] = useState('all');
   const [query, setQuery] = useState('');
-  const [selected, setSelected] = useState<Project | null>(null);
-  const [decision, setDecision] = useState<'approve' | 'corrections' | null>(null);
-  const [text, setText] = useState('');
-  const [correctionFields, setCorrectionFields] = useState<CorrectionField[]>([]);
   const [error, setError] = useState('');
-  const [sending, setSending] = useState(false);
-  const dialog = useRef<HTMLDialogElement>(null);
 
   const refreshing = useRef(false);
   const load = useCallback(async () => {
@@ -46,108 +35,24 @@ export default function AdminPage() {
       window.removeEventListener('focus', refresh);
     };
   }, [load]);
-  useEffect(() => {
-    if (selected) dialog.current?.showModal();
-    else dialog.current?.close();
-  }, [selected]);
-
-  const pending = projects.filter((project) => project.status === 'pending' && !project.deletion_requested_at);
   const visible = projects.filter(
     (project) =>
       (filter === 'all' || project.status === filter) &&
       `${project.name} ${project.repo_url}`.toLowerCase().includes(query.toLowerCase())
   );
-  const repoName = selected?.repo_url.replace(/^https:\/\/github\.com\//, '') || '';
-
-  function close() {
-    setSelected(null);
-    setDecision(null);
-    setText('');
-    setCorrectionFields([]);
-    setError('');
-  }
-
-  async function review(event: React.FormEvent) {
-    event.preventDefault();
-    if (!selected || !decision) return;
-    if (decision === 'corrections' && (!correctionFields.length || !text.trim())) {
-      setError('Selecciona al menos un campo y explica las correcciones necesarias.');
-      return;
-    }
-    if (decision === 'approve' && text !== repoName) {
-      setError('Escribe exactamente el nombre del repositorio.');
-      return;
-    }
-    setSending(true);
-    setError('');
-    try {
-      await api.reviewProject(
-        selected.id,
-        decision,
-        decision === 'corrections' ? text.trim() : undefined,
-        decision === 'corrections' ? correctionFields : undefined
-      );
-      toast(
-        decision === 'approve'
-          ? 'Proyecto aprobado. Despliegue autorizado.'
-          : 'Correcciones solicitadas al desarrollador.'
-      );
-      close();
-      void load();
-    } catch (cause) {
-      setError((cause as Error).message);
-    } finally {
-      setSending(false);
-    }
-  }
-
-  const cancelDecision = () => {
-    setDecision(null);
-    setText('');
-    setCorrectionFields([]);
-    setError('');
-  };
-
-  const selectProject = (project: Project) => {
-    setSelected(project);
-    setText('');
-    setCorrectionFields([]);
-    setDecision(null);
-    setError('');
-  };
-
   return (
     <div className="space-y-6">
       <header>
         <h1 className="text-3xl font-semibold">Proyectos</h1>
         <p className="mt-2 text-sm text-atlas-muted">
-          Solicitudes pendientes y proyectos registrados en la plataforma.
+          Proyectos registrados y estado de sus despliegues.
         </p>
       </header>
-      {error && !selected && (
+      {error && (
         <p role="alert" className="text-atlas-red">
           {error}
         </p>
       )}
-      <section>
-        <h2 className="mb-4 text-xl font-semibold">
-          Pendientes de revisión <span className="text-atlas-muted">({pending.length})</span>
-        </h2>
-        <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
-          {pending.map((project) => (
-            <button key={project.id} className="rounded-xl border border-atlas-mist p-5 text-left hover:border-atlas-red" onClick={() => selectProject(project)}>
-              <h3 className="font-semibold">{project.name}</h3>
-              <p className="mt-2 break-all text-xs text-atlas-muted">{project.repo_url}</p>
-              <span className="mt-4 block text-sm font-medium text-atlas-red">
-                Revisar solicitud →
-              </span>
-            </button>
-          ))}
-        </div>
-        {!pending.length && (
-          <p className="text-sm text-atlas-muted">No hay proyectos pendientes.</p>
-        )}
-      </section>
       <section>
         <h2 className="mb-4 text-xl font-semibold">Todos los proyectos</h2>
         <label className={`${fieldClassName} max-w-md`}>
@@ -157,9 +62,9 @@ export default function AdminPage() {
         <div className="my-4 flex flex-wrap gap-2">
           {[
             ['all', 'Todos'],
-            ['pending', 'Validación pendiente'],
+            ['pending', 'Pendientes'],
             ['corrections', 'Por corregir'],
-            ['approved', 'Aprobados'],
+            ['approved', 'En cola'],
             ['building', 'Construyendo y desplegando'],
             ['running', 'Desplegados'],
             ['failed', 'Fallidos'],
@@ -178,96 +83,6 @@ export default function AdminPage() {
           Mostrando {visible.length} de {projects.length} proyectos
         </p>
       </section>
-      <dialog ref={dialog} onCancel={close} className="m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-xl overflow-y-auto rounded-2xl p-6 backdrop:bg-black/50" aria-labelledby="review-title">
-        {selected && (
-          <>
-            <h2 id="review-title" className="text-xl font-semibold">
-              {decision === 'approve'
-                ? 'Confirmar aprobación'
-                : decision === 'corrections'
-                  ? 'Solicitar correcciones'
-                  : 'Detalle de la solicitud'}
-            </h2>
-            <h3 className="mt-4 font-semibold">{selected.name}</h3>
-            <dl className="my-4 divide-y divide-atlas-mist text-sm">
-              {Object.entries({
-                Repositorio: repoName,
-                Rama: selected.branch,
-                'Commit presentado': selected.source_commit || 'No disponible',
-                URL: selected.requested_subdomain
-                  ? `${selected.requested_subdomain}.dominio.edu.co`
-                  : 'No disponible',
-                Asignatura: selected.course || 'No aplica',
-                'Propósito funcional': selected.purpose || 'No disponible',
-              }).map(([label, value]) => (
-                <div key={label} className="py-3">
-                  <dt className="text-xs text-atlas-muted">{label}</dt>
-                  <dd className="mt-1 break-all">{value}</dd>
-                </div>
-              ))}
-            </dl>
-            {!decision ? (
-              <div className="flex flex-wrap justify-end gap-3">
-                <button onClick={close}>Cerrar</button>
-                <Link to={`/projects/${selected.id}`} className="text-atlas-red">
-                  Ver proyecto
-                </Link>
-                {selected.status === 'pending' && (
-                  <>
-                    <button onClick={() => setDecision('corrections')} className="rounded-lg border p-2">
-                      Solicitar correcciones
-                    </button>
-                    <button onClick={() => setDecision('approve')} className="rounded-lg bg-atlas-red p-2 text-white">
-                      Aprobar
-                    </button>
-                  </>
-                )}
-              </div>
-            ) : (
-              <form onSubmit={(event) => void review(event)}>
-                {decision === 'corrections' && (
-                  <div className="mb-5 space-y-3">
-                    <CustomSelect label="Campos a corregir" value="" disabled={sending || correctionFields.length === correctionFieldOptions.length} options={[{ value: '', label: 'Selecciona un campo para añadirlo' }, ...correctionFieldOptions.filter((option) => !correctionFields.includes(option.value))]} onChange={(field) => { if (field) setCorrectionFields((current) => [...current, field as CorrectionField]); }} />
-                    {correctionFields.length > 0 && (
-                      <ul className="flex flex-wrap gap-2" aria-label="Campos seleccionados para corregir">
-                        {correctionFields.map((field) => (
-                          <li key={field}>
-                            <button type="button" disabled={sending} onClick={() => setCorrectionFields((current) => current.filter((selectedField) => selectedField !== field))} className="rounded-full bg-atlas-mist px-3 py-2 text-sm" aria-label={`Quitar ${correctionFieldOptions.find((option) => option.value === field)?.label}`}>
-                              {correctionFieldOptions.find((option) => option.value === field)?.label} <span aria-hidden="true">×</span>
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    <p className="text-xs text-atlas-muted">Puedes añadir varios campos. Repositorio incluye la selección de su rama.</p>
-                  </div>
-                )}
-                <label className={fieldClassName}>
-                  <span className={fieldLabelClassName}>
-                    {decision === 'approve'
-                      ? `Escribe exactamente ${repoName}`
-                      : 'Explicación obligatoria'}
-                  </span>
-                  <textarea required disabled={sending} value={text} onChange={(event) => setText(event.target.value)} className={controlClassName} rows={decision === 'approve' ? 1 : 4} />
-                </label>
-                {error && (
-                  <p role="alert" className="my-3 text-sm text-atlas-red">
-                    {error}
-                  </p>
-                )}
-                <div className="mt-4 flex justify-end gap-3">
-                  <button type="button" onClick={cancelDecision}>
-                    Atrás
-                  </button>
-                  <button disabled={sending} className="rounded-lg bg-atlas-red p-3 text-sm text-white disabled:opacity-50">
-                    {decision === 'approve' ? 'Aprobar proyecto' : 'Enviar solicitud'}
-                  </button>
-                </div>
-              </form>
-            )}
-          </>
-        )}
-      </dialog>
     </div>
   );
 }

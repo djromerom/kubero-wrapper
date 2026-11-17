@@ -160,7 +160,7 @@ export default function ProjectDetailPage() {
         </header>
         {deletion}
         <section className="rounded-xl border border-atlas-mist p-5">
-          <h2 className="font-semibold">Solicitud de proyecto</h2>
+          <h2 className="font-semibold">Proyecto registrado</h2>
           <dl className="mt-4 space-y-3 text-sm">
             {Object.entries({
               Descripción: project.purpose || 'No disponible',
@@ -180,8 +180,8 @@ export default function ProjectDetailPage() {
           </p>
         </section>
         {!project.deletion_requested_at && <BuildReport project={project} onRetry={() => void load()} />}
-        {user?.role === 'admin' && (
-          <DeploymentSettings id={project.id} status={project.status} readOnly onSaved={() => void load()} />
+        {!project.deletion_requested_at && (
+          <DeploymentSettings id={project.id} status={project.status} readOnly={user?.role === 'admin'} onSaved={() => void load()} />
         )}
         {builds.length > 0 && (
           <section className="rounded-xl border border-atlas-mist p-5">
@@ -193,12 +193,12 @@ export default function ProjectDetailPage() {
         )}
         {project.status === 'pending' && (
           <p className="rounded-xl bg-amber-50 p-5 text-sm">
-            La solicitud espera revisión administrativa. La construcción y el despliegue comenzarán después de la aprobación.
+            El proyecto está en la cola de despliegue.
           </p>
         )}
         {project.status === 'approved' && (
           <p className="rounded-xl bg-green-50 p-5 text-sm">
-            La solicitud fue aprobada. El despliegue comenzará cuando el ejecutor esté activo.
+            El despliegue está programado y comenzará automáticamente cuando el ejecutor lo procese.
           </p>
         )}
         {project.status === 'corrections' && !project.deletion_requested_at && (
@@ -241,8 +241,8 @@ export default function ProjectDetailPage() {
       </section>
 
       {!project.deletion_requested_at && <BuildReport project={project} onRetry={() => void load()} />}
-      {user?.role === 'admin' && (
-        <DeploymentSettings id={project.id} status={project.status} readOnly onSaved={() => void load()} />
+      {!project.deletion_requested_at && (
+        <DeploymentSettings id={project.id} status={project.status} readOnly={user?.role === 'admin'} onSaved={() => void load()} />
       )}
       <RuntimeLogs id={project.id} />
 

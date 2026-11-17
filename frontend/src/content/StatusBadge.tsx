@@ -21,13 +21,13 @@ export default function StatusBadge({ status }: Props) {
       {(
         {
           adapting: 'En adaptación',
-          pending: 'Validación pendiente',
+          pending: 'En cola',
           building: 'Construyendo y desplegando',
           corrections: 'Correcciones pendientes',
           retained: 'Retenido',
           recovery_pending: 'Recuperación pendiente',
           ci_failed: 'CI fallido',
-          approved: 'Aprobado',
+          approved: 'En cola',
           passed: 'Superado',
           not_started: 'No iniciado',
           not_deployed: 'No desplegado',

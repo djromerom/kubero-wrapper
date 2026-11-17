@@ -94,7 +94,7 @@ export default function ProjectCorrectionsForm({ project, onSubmitted }: { proje
   return (
     <form className="mt-4 space-y-5" onSubmit={submit}>
       <fieldset disabled={sending} className="space-y-5 disabled:opacity-70">
-        <legend className="mb-3 text-sm text-atlas-muted">Actualiza los campos indicados por el administrador.</legend>
+        <legend className="mb-3 text-sm text-atlas-muted">Actualiza los campos pendientes para desplegar el proyecto.</legend>
         {fields.includes('name') && (
           <label className={fieldClassName}>
             <span className={fieldLabelClassName}>Nombre</span>
@@ -129,7 +129,7 @@ export default function ProjectCorrectionsForm({ project, onSubmitted }: { proje
       )}
       {!fields.length && <p role="alert" className="text-sm text-atlas-red">Esta solicitud no tiene campos de corrección definidos.</p>}
       <button disabled={sending || loadingRepositories || loadingBranches || !fields.length || Boolean(repositoryError || branchError)} className="rounded-lg bg-atlas-red px-4 py-2 text-sm text-white disabled:opacity-50">
-        {sending ? 'Enviando…' : 'Enviar a validación'}
+        {sending ? 'Enviando…' : 'Guardar y desplegar'}
       </button>
     </form>
   );

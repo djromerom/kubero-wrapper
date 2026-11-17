@@ -136,7 +136,7 @@ impl Fixture {
             .await?;
         let admin_token = login["token"].as_str().context("Missing admin token")?;
         let project = Uuid::new_v4();
-        sqlx::query("INSERT INTO projects(id,user_id,name,slug,repo_url,purpose) VALUES ($1,$2,'Integration',$3,'https://github.com/example/fixture','Integration')")
+        sqlx::query("INSERT INTO projects(id,user_id,name,slug,repo_url,purpose,source_commit) VALUES ($1,$2,'Integration',$3,'https://github.com/example/fixture','Integration',repeat('a',40))")
             .bind(project).bind(owner).bind(format!("atlas-rust-test-{project}")).execute(&self.db).await?;
         let route = format!("/projects/{project}");
         let review = format!("/admin/projects/{project}/review");
@@ -149,7 +149,7 @@ impl Fixture {
                 StatusCode::OK,
             )
             .await?;
-        ensure!(p["status"] == "pending", "New projects must await administrative review");
+        ensure!(p["status"] == "approved", "New projects must enter the deployment queue");
         self.request(
             Method::GET,
             &route,
@@ -166,106 +166,27 @@ impl Fixture {
             StatusCode::NOT_FOUND,
         )
         .await?;
-        self.request(
-            Method::POST,
-            &review,
-            &owner_token,
-            json!({"decision":"approve"}),
-            StatusCode::FORBIDDEN,
-        )
-        .await?;
-        self.request(
-            Method::POST,
-            &review,
-            admin_token,
-            json!({"decision":"approve"}),
-            StatusCode::CONFLICT,
-        )
-        .await?;
-        sqlx::query("UPDATE projects SET status='pending', source_commit=$2, adaptation_report=$3 WHERE id=$1")
-            .bind(project).bind("a".repeat(40)).bind(json!({"outcome":"intervention_required", "build_verified":false, "blockers":["Fixture"]})).execute(&self.db).await?;
-        let p = self
-            .request(
-                Method::GET,
-                &route,
-                admin_token,
-                Value::Null,
-                StatusCode::OK,
-            )
-            .await?;
-        ensure!(
-            p["adaptation_report"]["outcome"] == "intervention_required",
-            "Admin cannot see adaptation report"
-        );
-        self.request(
-            Method::POST,
-            &review,
-            admin_token,
-            json!({"decision":"corrections", "note":" "}),
-            StatusCode::BAD_REQUEST,
-        )
-        .await?;
-        for fields in [json!([]), json!(["deployment_config"]), json!(["purpose", "purpose"])] {
-            self.request(Method::POST, &review, admin_token,
-                json!({"decision":"corrections", "note":"Select fields", "correction_fields":fields}),
-                StatusCode::BAD_REQUEST).await?;
-        }
-        let p = self
-            .request(
-                Method::POST,
-                &review,
-                admin_token,
-                json!({"decision":"corrections", "note":"Academic correction", "correction_fields":["name", "purpose"]}),
-                StatusCode::OK,
-            )
-            .await?;
-        ensure!(
-            p["status"] == "corrections" && p["review_note"] == "Academic correction",
-            "The administrative correction was not saved"
-        );
-        ensure!(p["correction_fields"] == json!(["name", "purpose"]), "The selected correction fields were not returned");
-        let saved = self.request(Method::GET, &route, &owner_token, Value::Null, StatusCode::OK).await?;
-        ensure!(saved["correction_fields"] == json!(["name", "purpose"]), "Selected fields were not persisted");
+        let admission: Option<chrono::DateTime<chrono::Utc>> =
+            sqlx::query_scalar("SELECT registration_approved_at FROM projects WHERE id=$1")
+                .bind(project).fetch_one(&self.db).await?;
+        ensure!(admission.is_none(), "Direct deployment should not fabricate administrative approval");
+        let retired = self.http.post(format!("{}{review}", self.base)).bearer_auth(admin_token)
+            .json(&json!({"decision":"approve"})).send().await?;
+        ensure!(retired.status() == StatusCode::NOT_FOUND, "Administrative review endpoint is still active");
+
+        // Historical corrections can be resubmitted directly by their owner.
+        sqlx::query("UPDATE projects SET status='corrections', correction_fields=ARRAY['name','purpose'] WHERE id=$1")
+            .bind(project).execute(&self.db).await?;
         self.request(Method::POST, &format!("{route}/resubmit"), &other_token,
             json!({"name":"Updated project", "purpose":"Updated purpose"}), StatusCode::CONFLICT).await?;
         self.request(Method::POST, &format!("{route}/resubmit"), &owner_token,
             json!({"purpose":"Updated purpose"}), StatusCode::BAD_REQUEST).await?;
-        self.request(Method::POST, &format!("{route}/resubmit"), &owner_token,
-            json!({"name":"Updated project", "purpose":"Updated purpose", "course":"Unrequested change"}), StatusCode::BAD_REQUEST).await?;
         let resubmitted = self.request(Method::POST, &format!("{route}/resubmit"), &owner_token,
             json!({"name":"Updated project", "purpose":"Updated purpose"}), StatusCode::OK).await?;
-        ensure!(resubmitted["status"] == "pending", "Metadata correction did not return to review");
-        ensure!(resubmitted["name"] == "Updated project" && resubmitted["purpose"] == "Updated purpose", "Metadata corrections were not stored");
-        ensure!(resubmitted["source_commit"] == "a".repeat(40), "Metadata corrections changed the presented commit");
-        ensure!(resubmitted["repo_url"] == p["repo_url"] && resubmitted["branch"] == p["branch"], "Metadata corrections changed the source");
-        ensure!(resubmitted["correction_fields"] == json!([]) && resubmitted["review_note"].is_null(), "Resubmission retained obsolete correction fields");
-        self.request(Method::POST, &review, admin_token,
-            json!({"decision":"corrections", "note":"Check source", "correction_fields":["branch"]}), StatusCode::OK).await?;
-        self.request(Method::POST, &format!("{route}/resubmit"), &owner_token,
-            json!({"branch":"main"}), StatusCode::BAD_REQUEST).await?;
-        let still_corrections = self.request(Method::GET, &route, &owner_token, Value::Null, StatusCode::OK).await?;
-        ensure!(still_corrections["status"] == "corrections", "Source validation failed but the project was resubmitted");
-        sqlx::query("UPDATE projects SET status='pending' WHERE id=$1")
-            .bind(project).execute(&self.db).await?;
-        let p = self.request(Method::POST, &review, admin_token, json!({"decision":"approve"}), StatusCode::OK).await?;
-        ensure!(
-            p["status"] == "approved" && p["adaptation_report"].is_null(),
-            "Approval must succeed without a prebuilt image"
-        );
-        ensure!(p["correction_fields"] == json!([]), "Approval retained obsolete correction fields");
-        let cleared: Option<String> =
-            sqlx::query_scalar("SELECT approved_image FROM projects WHERE id=$1")
-                .bind(project)
-                .fetch_one(&self.db)
-                .await?;
-        ensure!(cleared.is_none(), "Stale image persisted in PostgreSQL");
-        let admitted: bool = sqlx::query_scalar("SELECT registration_approved_at IS NOT NULL FROM projects WHERE id=$1")
-            .bind(project).fetch_one(&self.db).await?;
-        ensure!(admitted, "Administrative approval was not recorded");
-        let builds: i64 = sqlx::query_scalar("SELECT count(*) FROM builds WHERE project_id=$1")
-            .bind(project).fetch_one(&self.db).await?;
-        ensure!(builds == 0, "The review handler built the application prematurely");
-        self.request(Method::POST, &review, admin_token, json!({"decision":"approve"}), StatusCode::CONFLICT).await?;
+        ensure!(resubmitted["status"] == "approved", "Resubmission did not enter the deployment queue");
+        ensure!(resubmitted["source_commit"] == "a".repeat(40), "Resubmission lost the registered commit");
+        ensure!(resubmitted["correction_fields"] == json!([]) && resubmitted["review_note"].is_null(), "Stale corrections persisted");
+
         self.request(Method::DELETE, &route, &other_token, Value::Null, StatusCode::NOT_FOUND).await?;
         sqlx::query("UPDATE projects SET status='building' WHERE id=$1").bind(project).execute(&self.db).await?;
         self.request(Method::DELETE, &route, &owner_token, Value::Null, StatusCode::CONFLICT).await?;

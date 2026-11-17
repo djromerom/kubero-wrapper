@@ -4,7 +4,7 @@ import { cli, repoRoot, localDir, run, database, acquireLock, sleep, sqlLiteral 
 import { validateProjectId } from './deploy-local.mjs';
 
 export const claimSql = `WITH next_project AS (
- SELECT id FROM projects WHERE status='approved' AND registration_approved_at IS NOT NULL AND deletion_requested_at IS NULL
+ SELECT id FROM projects WHERE status='approved' AND source_commit ~ '^[a-fA-F0-9]{40}$' AND deletion_requested_at IS NULL
  ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1
 ), claimed AS (
  UPDATE projects p SET status='building', updated_at=NOW()

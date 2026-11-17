@@ -1,5 +1,6 @@
 import { fieldClassName, fieldLabelClassName, controlClassName } from '../shared/formStyles';
 import AuthLayout from './AuthLayout';
+import GoogleButton from './GoogleButton';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api';
@@ -20,8 +21,8 @@ export default function LoginPage() {
     if (!form.checkValidity()) {
       setError(
         !email.trim() || !password
-          ? 'Ingresa tu correo institucional y tu contraseña.'
-          : 'Ingresa un correo institucional válido.'
+          ? 'Ingresa tu correo y tu contraseña.'
+          : 'Ingresa un correo electrónico válido.'
       );
       form.querySelector<HTMLInputElement>('input:invalid')?.focus();
       return;
@@ -44,7 +45,7 @@ export default function LoginPage() {
       <h1 className="mb-8 text-left text-2xl font-semibold tracking-tight">Bienvenido/a a Atlas</h1>
       <form onSubmit={submitLocal} noValidate aria-busy={loading} className="space-y-6">
         <label className={fieldClassName}>
-          <span className={fieldLabelClassName}>Correo Institucional</span>
+          <span className={fieldLabelClassName}>Correo electrónico</span>
           <input type="email" autoComplete="username" required value={email} onChange={(event) => setEmail(event.target.value)} className={controlClassName} />
         </label>
         <label className={fieldClassName}>
@@ -62,6 +63,7 @@ export default function LoginPage() {
           {loading ? 'Iniciando…' : 'Iniciar sesión'}
         </button>
       </form>
+      <GoogleButton />
       <Link to="/register" className="mt-5 block text-center text-sm font-medium text-atlas-red hover:underline">
         Crear cuenta
       </Link>

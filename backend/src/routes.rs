@@ -35,9 +35,11 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/health", get(health_check))
         .route("/api/auth/register", post(register))
         .route("/api/auth/login", post(login))
+        .route("/api/auth/google", get(crate::google::configuration).post(crate::google::login))
         .route("/api/github/callback", get(github::callback));
 
     let protected_routes = Router::new()
+        .route("/api/auth/google/link", post(crate::google::link))
         .route("/api/projects", get(list_projects).post(create_project))
         .route("/api/subdomains/availability", get(subdomain_availability))
         .route("/api/projects/:id", get(get_project).delete(delete_project))

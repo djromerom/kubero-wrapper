@@ -168,7 +168,9 @@ La autenticación institucional, SSE y el ciclo de vida completo siguen pendient
 
 ## GitHub y autenticación
 
-El desarrollo actual utiliza registro y contraseña locales con JWT. La autenticación institucional definida en los issues todavía debe implementarse.
+Atlas permite crear una cuenta con cualquier correo y contraseña, o entrar con Google. GitHub se vincula por separado para autorizar los repositorios.
+
+Para habilitar Google, crea un cliente OAuth de tipo **Aplicación web** con público **Externo** y añade `http://localhost:5173` a sus orígenes JavaScript autorizados. Si el cliente está en modo de prueba, añade las cuentas de prueba en Google. Copia el ID público en `GOOGLE_CLIENT_ID` en el archivo `.env` del wrapper y vuelve a ejecutar `node scripts/start-local-kubero.mjs`. El botón usa Google Identity Services y solo necesita el ID público. Si ya existe una cuenta con ese correo, entra con contraseña y vincula Google desde el perfil.
 
 La vinculación de GitHub es independiente mediante GitHub App. Configurar en `.env` los valores de `.env.example`. En la App se utiliza **Request user authorization (OAuth) during installation** y el callback `http://localhost:3000/api/github/callback`. El flujo implementado solicita lectura de metadatos y contenidos.
 

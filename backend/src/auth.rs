@@ -25,6 +25,7 @@ pub fn hash_password(password: &str) -> AppResult<String> {
 }
 
 pub fn verify_password(password: &str, hash: &str) -> AppResult<bool> {
+    if hash == "!" { return Ok(false); } // Accounts created with Google have no local password.
     let parsed_hash = PasswordHash::new(hash)
         .map_err(|e| crate::error::AppError::Internal(e.to_string()))?;
     Ok(Argon2::default()

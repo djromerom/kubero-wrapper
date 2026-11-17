@@ -1,5 +1,6 @@
 import { fieldClassName, fieldLabelClassName, controlClassName } from '../shared/formStyles';
 import AuthLayout from './AuthLayout';
+import GoogleButton from './GoogleButton';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api';
@@ -49,6 +50,7 @@ export default function RegisterPage() {
             Registrarse
           </button>
         </form>
+        <GoogleButton />
         <p className="mt-4 text-center text-sm text-atlas-muted">
           ¿Ya tienes cuenta?{' '}
           <Link to="/login" className="text-atlas-red hover:underline">

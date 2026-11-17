@@ -15,7 +15,6 @@ pub struct Config {
     pub host: String,
     pub port: u16,
     pub frontend_url: String,
-    pub google_client_id: String,
     pub github_app_id: String,
     pub github_app_slug: String,
     pub github_client_id: String,
@@ -58,7 +57,6 @@ impl Config {
             frontend_url: env::var("FRONTEND_URL")
                 .unwrap_or_else(|_| "http://localhost:5173".into()),
             github_app_id: env::var("GITHUB_APP_ID").unwrap_or_default(),
-            google_client_id: env::var("GOOGLE_CLIENT_ID").unwrap_or_default(),
             github_app_slug: env::var("GITHUB_APP_SLUG").unwrap_or_default(),
             github_client_id: env::var("GITHUB_CLIENT_ID").unwrap_or_default(),
             github_client_secret: env::var("GITHUB_CLIENT_SECRET").unwrap_or_default(),

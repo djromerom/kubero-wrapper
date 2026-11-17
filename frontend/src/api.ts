@@ -179,10 +179,6 @@ export const api = {
   retryDeployment: (id: string) =>
     request<void>(`/projects/${id}/deployment/retry`, { method: 'POST' }),
   health: () => request<{ status: string }>('/health'),
-  googleConfig: () => request<{ client_id: string }>('/auth/google'),
-  googleSession: (credential: string, link: boolean) => request<AuthResponse>(link ? '/auth/google/link' : '/auth/google', {
-    method: 'POST', body: JSON.stringify({ credential }),
-  }),
 
   register: (data: { email: string; password: string; name: string }) =>
     request<AuthResponse>('/auth/register', { method: 'POST', body: JSON.stringify(data) }),

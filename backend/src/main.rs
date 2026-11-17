@@ -4,7 +4,6 @@ mod db;
 mod error;
 mod events;
 mod github;
-mod google;
 mod kubero;
 mod models;
 mod routes;

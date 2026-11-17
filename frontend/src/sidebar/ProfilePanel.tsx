@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, type User } from '../api';
 import GithubButton from '../shared/GithubButton';
-import GoogleButton from '../login/GoogleButton';
 import {
   IconFileText,
   IconLogout,
@@ -101,7 +100,6 @@ export default function ProfilePanel({
           {error}
         </p>
       )}
-      <GoogleButton link />
       {/*<div className="mt-5 grid w-full grid-cols-3 gap-1" role="group" aria-label="Apariencia">
         <button type="button" aria-pressed="true" className="flex flex-col items-center gap-1 rounded-lg border border-atlas-ink bg-atlas-ink px-1 py-2 text-[11px] font-medium text-white">
           <IconSunHigh size={20} stroke={2} aria-hidden="true" />

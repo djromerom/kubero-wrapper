@@ -25,12 +25,12 @@ export default function BuildReport({ project, onRetry }: { project: Project; on
       <h2 className="font-semibold">Construcción y despliegue</h2>
       <p className="mt-3 text-sm">
         {report?.summary || (project.status === 'approved'
-          ? 'Esperando al ejecutor para construir el Dockerfile del commit presentado.'
+          ? 'Esperando al ejecutor para desplegar el commit presentado.'
           : project.status === 'failed'
             ? 'La construcción o el despliegue falló. Consulta los logs para conocer la causa.'
             : project.status === 'running'
               ? 'La aplicación está desplegada.'
-              : 'Kubero está construyendo la imagen y preparando la aplicación.')}
+              : 'Atlas está preparando los servicios de la aplicación.')}
       </p>
       {report && (
         <dl className="mt-3 space-y-2 break-all text-sm">
@@ -40,7 +40,7 @@ export default function BuildReport({ project, onRetry }: { project: Project; on
           </div>
           <div>
             <dt className="text-atlas-muted">Imagen</dt>
-            <dd>{report.build_verified ? 'Construida' : 'Pendiente'}</dd>
+            <dd>{report.build_verified ? 'Preparada' : 'Pendiente'}</dd>
           </div>
           <div>
             <dt className="text-atlas-muted">Disponibilidad</dt>

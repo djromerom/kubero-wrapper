@@ -332,12 +332,14 @@ async fn save_project_configuration(
 async fn get_runtime_logs(
     State(state): State<AppState>, Extension(user): Extension<AuthUser>, Path(id): Path<Uuid>,
 ) -> AppResult<Json<Vec<serde_json::Value>>> {
-    let (slug, raw) = sqlx::query_as::<_, (String, String)>(
-        "SELECT slug, deployment_config::text FROM projects WHERE id=$1 AND (user_id=$2 OR $3) AND status != 'deleted'",
+    let (slug, raw, pipeline) = sqlx::query_as::<_, (String, String, Option<String>)>(
+        "SELECT slug, deployment_config::text, kubero_pipeline FROM projects WHERE id=$1 AND (user_id=$2 OR $3) AND status != 'deleted'",
     ).bind(id).bind(user.id).bind(user.role == "admin").fetch_optional(&state.db).await?.ok_or(AppError::NotFound)?;
     let config: DeploymentConfig = serde_json::from_str(&raw).map_err(|e| AppError::Internal(e.to_string()))?;
     let kubero = state.kubero.as_ref().ok_or_else(|| AppError::BadRequest("El clúster no está configurado.".into()))?;
-    let namespace = if state.config.local_image_deployment { "atlas-production" } else { &state.config.kubero_namespace };
+    let compose_namespace = format!("atlas-c-{id}");
+    let namespace = if pipeline.as_deref() == Some("atlas-compose") { &compose_namespace }
+        else if state.config.local_image_deployment { "atlas-production" } else { &state.config.kubero_namespace };
     let mut entries = kubero.get_runtime_logs(namespace, &slug).await?;
     for entry in &mut entries {
         if let Some(text) = entry.get("logs").and_then(|value| value.as_str()) {
@@ -634,7 +636,13 @@ async fn get_deployment_status(
 
     if let Some(kubero) = &state.kubero {
         if let Some(app_name) = &project.kubero_app {
-            let namespace = &state.config.kubero_namespace;
+            if project.kubero_pipeline.as_deref() == Some("atlas-compose") {
+                let namespace = format!("atlas-c-{id}");
+                let status = kubero.get_compose_status(&namespace, &project.slug).await?;
+                return Ok(Json(json!({ "project_id": id, "project_name": project.name, "slug": project.slug,
+                    "domain": project.domain, "cluster_configured": true, "kubero_status": status, "events": [] })));
+            }
+            let namespace = if state.config.local_image_deployment { "atlas-production" } else { &state.config.kubero_namespace };
             let status = kubero.get_app_status(namespace, app_name).await?;
             
             // Get pod events for this app

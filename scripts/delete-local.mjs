@@ -3,6 +3,7 @@ import { validateProjectId } from './deploy-local.mjs';
 import { removeLocalImages } from './image-cleanup.mjs';
 import { withClusterMutation } from './cluster-operation.mjs';
 import { getClusterSettings } from './cluster-settings.mjs';
+import { composeNamespace } from './deploy-compose.mjs';
 
 const managedResources = ['deployments', 'replicasets', 'pods', 'services', 'ingresses', 'jobs', 'cronjobs', 'secrets', 'configmaps', 'persistentvolumeclaims', 'serviceaccounts', 'roles', 'rolebindings', 'horizontalpodautoscalers'];
 
@@ -12,11 +13,19 @@ export async function deleteProject(projectId, { db = database, k = kube('k3d-at
   if (!record) throw new Error('El proyecto no tiene una eliminación pendiente o está construyéndose.');
   const project = JSON.parse(record);
   const slug = project.slug, app = project.kubero_app || slug;
-  if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(slug) || app !== slug || (project.kubero_pipeline && project.kubero_pipeline !== 'atlas')) throw new Error('La aplicación no corresponde al despliegue local esperado.');
+  if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(slug) || app !== slug || (project.kubero_pipeline && !['atlas', 'atlas-compose'].includes(project.kubero_pipeline))) throw new Error('La aplicación no corresponde al despliegue local esperado.');
   try {
     console.log(`Retirando recursos de ${slug}...`);
     const selectors = [`app.kubernetes.io/instance=${app}`, `atlas-project=${slug}`];
     const claimIds = new Set();
+    const namespace = composeNamespace(id);
+    const owned = await k.json(['get', 'namespace', namespace, '--ignore-not-found']);
+    if (owned?.metadata) {
+      if (owned.metadata.labels?.['atlas-project-id'] !== id) throw new Error('El namespace Compose no pertenece al proyecto.');
+      const claims = await k.json(['get', 'persistentvolumeclaims', '-n', namespace]);
+      for (const claim of claims.items) claimIds.add(claim.metadata.uid);
+      await k(['delete', 'namespace', namespace, '--wait=true', '--timeout=180s']);
+    }
     for (const labels of selectors) {
       const claims = await k.json(['get', 'persistentvolumeclaims', '-n', 'atlas-production', '-l', labels]);
       for (const claim of claims.items) claimIds.add(claim.metadata.uid);

@@ -11,10 +11,11 @@ import { removeInside } from '../runtime.mjs';
 const id = '12345678-1234-1234-1234-123456789abc';
 const commit = 'a'.repeat(40);
 
-async function fixture(t, { dockerfile = true, approvedImage = null, previousCommit = commit } = {}) {
+async function fixture(t, { dockerfile = true, compose, approvedImage = null, previousCommit = commit } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'atlas-deployment-'));
   t.after(() => removeInside(tmpdir(), directory));
   await mkdir(join(directory, 'app'));
+  if (compose !== undefined) await writeFile(join(directory, 'app/docker-compose.yml'), compose);
   await writeFile(join(directory, 'app', dockerfile ? 'Dockerfile' : 'package.json'), dockerfile ? 'FROM node:22-alpine\n' : '{}');
   await archive({ cwd: directory, file: join(directory, 'source.tgz'), gzip: true }, ['app']);
   const bytes = await readFile(join(directory, 'source.tgz'));
@@ -26,7 +27,7 @@ async function fixture(t, { dockerfile = true, approvedImage = null, previousCom
     return sql.startsWith('SELECT json_build_object') ? JSON.stringify(record) : '';
   };
   const k = async args => args[0] === 'get' && args[1].startsWith('deployment/') ? 'deployment/fixture' : '';
-  k.json = async () => ({ status: { phase: 'Active' } });
+  k.json = async args => args.includes('namespace') && args.includes('atlas-c-' + id) ? null : { status: { phase: 'Active' }, items: [] };
   k.apply = async resource => calls.resources.push(resource);
   const fetcher = async url => {
     calls.urls.push(url);
@@ -65,6 +66,32 @@ test('después de aprobar se construye el Dockerfile del SHA presentado y se des
 test('sin Dockerfile se informa el fallo y no se activa ningún empaquetador automático', async t => {
   const { calls, dependencies } = await fixture(t, { dockerfile: false });
   await assert.rejects(deploy({ projectId: id }, dependencies), /requiere un Dockerfile/);
+  assert.equal(calls.builds.length, 0);
+  assert.equal(calls.resources.length, 0);
+});
+
+test('Compose con y sin Dockerfile despliega todos los servicios y dirige HTTP al puerto interno', async t => {
+  for (const dockerfile of [true, false]) {
+    const { calls, dependencies } = await fixture(t, { dockerfile, compose: `services:
+  web:
+    image: nginx:alpine
+    ports: ["8088:80"]
+    depends_on: [cache]
+  cache:
+    image: redis:7
+    expose: [6379]` });
+    await deploy({ projectId: id }, dependencies);
+    assert.equal(calls.builds.length, 0);
+    assert.deepEqual(calls.resources.filter(r => r.kind === 'Deployment').map(r => r.metadata.name), ['cache', 'web']);
+    const ingress = calls.resources.find(r => r.kind === 'Ingress');
+    assert.deepEqual(ingress.spec.rules[0].http.paths[0].backend.service, { name: 'web', port: { number: 80 } });
+    assert.ok(calls.sql.some(q => q.includes("status='running'") && q.includes('docker-compose.yml')));
+  }
+});
+
+test('un Compose inválido no utiliza el Dockerfile de respaldo ni modifica el clúster', async t => {
+  const { calls, dependencies } = await fixture(t, { compose: 'services: {web: {image: nginx, privileged: true}}' });
+  await assert.rejects(deploy({ projectId: id }, dependencies), /privileged/);
   assert.equal(calls.builds.length, 0);
   assert.equal(calls.resources.length, 0);
 });

@@ -57,8 +57,8 @@ export default function DeploymentFields({
   return (
     <fieldset disabled={disabled} className="space-y-5 disabled:opacity-70">
       <p className="text-sm text-atlas-muted">
-        Se usará el Dockerfile del repositorio. Si falta, Atlas intentará una plantilla para
-        Next.js, Astro, Vite o Node. Una aplicación no compatible deberá proporcionar su Dockerfile.
+        Atlas busca primero un archivo Docker Compose en la raíz. Si falta, usa el Dockerfile.
+        Con Compose, indica el servicio público con x-atlas-web si publicas varios puertos en servicios distintos.
       </p>
       <div className="grid gap-5 sm:grid-cols-2">
         <label className={fieldClassName}>

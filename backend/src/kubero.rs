@@ -391,6 +391,17 @@ impl KuberoManager {
         Ok(format!("Build triggered for {}", app_name))
     }
 
+    pub async fn get_compose_status(&self, namespace: &str, slug: &str) -> AppResult<serde_json::Value> {
+        let deployments = Api::<Deployment>::namespaced(self.client.clone(), namespace)
+            .list(&ListParams::default().labels(&format!("atlas-project={slug}"))).await?;
+        let replicas: i32 = deployments.items.iter().filter_map(|d| d.spec.as_ref()?.replicas).sum();
+        let ready: i32 = deployments.items.iter().filter_map(|d| d.status.as_ref()?.ready_replicas).sum();
+        let available: i32 = deployments.items.iter().filter_map(|d| d.status.as_ref()?.available_replicas).sum();
+        Ok(serde_json::json!({ "name": slug, "namespace": namespace, "status": {
+            "phase": if replicas > 0 && available == replicas { "Running" } else { "Pending" },
+            "replicas": replicas, "availableReplicas": available, "readyReplicas": ready, "conditions": [] } }))
+    }
+
     pub async fn get_app_status(&self, namespace: &str, app_name: &str) -> AppResult<serde_json::Value> {
         let api: Api<KuberoApp> = Api::namespaced(self.client.clone(), namespace);
         let app = api.get(app_name).await

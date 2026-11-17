@@ -31,7 +31,7 @@ const steps = [
   },
   {
     title: 'Sigue la construcción y el despliegue',
-    description: 'Tras la aprobación, el ejecutor construye el Dockerfile del commit registrado, publica su imagen en el registro local y pide a Kubero desplegarla en K3s. Atlas comprueba que responda antes de marcarla como desplegada.',
+    description: 'Tras la aprobación, Atlas despliega los servicios del archivo Compose del commit registrado. Si falta ese archivo, construye el Dockerfile con Kubero. Atlas comprueba que responda antes de marcarla como desplegada.',
   },
 ];
 
@@ -54,7 +54,7 @@ export default function DocumentationPage() {
         <Link to={user?.role === 'admin' ? '/admin/projects' : '/'} className="text-sm text-atlas-red hover:underline">← Proyectos</Link>
         <h1 className="mt-5 text-3xl font-semibold">Documentación</h1>
         <p className="mt-3 max-w-2xl leading-relaxed text-atlas-muted">Cómo registrar, desplegar y eliminar una aplicación en la versión actual de Atlas.</p>
-        <p className="mt-4 inline-block rounded-full bg-atlas-mist px-3 py-1 text-xs font-medium">Prueba local · Dockerfile · K3s y Kubero</p>
+        <p className="mt-4 inline-block rounded-full bg-atlas-mist px-3 py-1 text-xs font-medium">Prueba local · Compose y Dockerfile · K3s</p>
       </header>
 
       <nav aria-label="Contenido de la documentación" className="rounded-xl border border-atlas-mist p-5">
@@ -71,7 +71,7 @@ export default function DocumentationPage() {
         <ul className="mt-4 list-disc space-y-3 pl-5 text-sm leading-relaxed text-atlas-muted">
           <li>El repositorio debe pertenecer a tu cuenta personal de GitHub y estar autorizado para Atlas.</li>
           <li>Sube los cambios a la rama que vas a seleccionar. Un commit que solo existe en tu PC todavía no está disponible para Atlas.</li>
-          <li>Incluye un <code className="text-atlas-ink">Dockerfile</code> en la raíz que construya e inicie tu aplicación. En esta prueba, el puerto configurado por defecto es <code className="text-atlas-ink">3000</code>; el servidor debe escuchar en <code className="text-atlas-ink">0.0.0.0</code>.</li>
+          <li>Incluye un <code className="text-atlas-ink">compose.yaml</code> en la raíz con el servicio web y su puerto interno. Atlas también reconoce compose.yml y docker-compose.yaml/.yml. Si falta Compose, utiliza el Dockerfile de la raíz. En esta prueba, el puerto configurado por defecto es <code className="text-atlas-ink">3000</code>; el servidor debe escuchar en <code className="text-atlas-ink">0.0.0.0</code>.</li>
           <li>Usa nombres completos para las imágenes base, como <code className="break-all text-atlas-ink">docker.io/library/node:22-alpine</code>. El constructor no puede pedirte que elijas un registro durante la construcción.</li>
           <li>El sistema de archivos raíz del contenedor es de solo lectura y <code className="text-atlas-ink">/tmp</code> permite archivos temporales. Si usas Nginx, adapta sus rutas de escritura o utiliza una imagen compatible, como <code className="break-all text-atlas-ink">docker.io/nginxinc/nginx-unprivileged:stable-alpine</code>.</li>
         </ul>
@@ -115,10 +115,10 @@ export default function DocumentationPage() {
 
       <section id="despliegue" aria-labelledby="despliegue-title" className="scroll-mt-6 space-y-4">
         <h2 id="despliegue-title" className="text-xl font-semibold">Builds, imágenes y logs</h2>
-        <p className="text-sm leading-relaxed text-atlas-muted">Un build es un intento de construcción y despliegue. La imagen es el paquete que se obtiene del Dockerfile; Kubero usa ese paquete para ejecutar la aplicación. Una imagen puede haberse construido correctamente y fallar después al arrancar.</p>
+        <p className="text-sm leading-relaxed text-atlas-muted">Un build es un intento de construcción y despliegue. Cada servicio Compose puede usar una imagen publicada o construir la suya desde el repositorio. Una imagen puede haberse construido correctamente y fallar después al arrancar.</p>
         <p className="text-sm leading-relaxed text-atlas-muted">En «Builds», el intento más reciente lleva «(actual)» junto al código del commit. Esa marca identifica el último intento, aunque haya fallado. Solo se puede abrir un log a la vez, y el icono a la derecha del badge copia su contenido.</p>
         <p className="text-sm leading-relaxed text-atlas-muted">Los logs de construcción explican cómo se creó la imagen y qué pasó al desplegarla. Los «Logs de aplicación y servicios» muestran la salida de los contenedores y se actualizan mientras el panel está abierto.</p>
-        <p className="text-sm leading-relaxed text-atlas-muted">Si el despliegue falla, corrige la causa indicada en los logs. Cuando necesites cambiar el código o el Dockerfile, haz commit y push. Después pulsa «Reintentar con la versión actual de la rama»: Atlas consulta ese commit y vuelve a procesar el proyecto sin repetir la aprobación administrativa.</p>
+        <p className="text-sm leading-relaxed text-atlas-muted">Si el despliegue falla, corrige la causa indicada en los logs. Cuando necesites cambiar el código, el Compose o el Dockerfile, haz commit y push. Después pulsa «Reintentar con la versión actual de la rama»: Atlas consulta ese commit y vuelve a procesar el proyecto sin repetir la aprobación administrativa.</p>
         <p className="text-sm leading-relaxed text-atlas-muted">Pueden quedar imágenes de intentos anteriores almacenadas aunque solo se ejecute una versión. Esas imágenes ocupan disco; tenerlas guardadas no equivale a tener varias aplicaciones funcionando.</p>
       </section>
 
@@ -143,7 +143,7 @@ export default function DocumentationPage() {
 
       <section id="alcance" aria-labelledby="alcance-title" className="scroll-mt-6 rounded-xl bg-atlas-mist p-5">
         <h2 id="alcance-title" className="text-xl font-semibold">Alcance actual</h2>
-        <p className="mt-3 text-sm leading-relaxed text-atlas-muted">Esta versión utiliza una cuenta local de Atlas, vinculación de GitHub, revisión administrativa, construcción desde Dockerfile y despliegue local con Kubero sobre K3s.</p>
+        <p className="mt-3 text-sm leading-relaxed text-atlas-muted">Esta versión utiliza una cuenta local de Atlas, vinculación de GitHub, revisión administrativa, despliegue desde Compose o Dockerfile sobre K3s.</p>
         <ul className="mt-4 list-disc space-y-2 pl-5 text-sm leading-relaxed text-atlas-muted">
           <li>Un push a GitHub todavía no actualiza automáticamente una aplicación desplegada. La actualización de proyectos desplegados queda pendiente.</li>
           <li>Todavía no se ejecutan CI de los proyectos ni empaquetado automático.</li>

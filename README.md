@@ -47,7 +47,7 @@ node scripts/start-local-kubero.mjs
 
 El comando inicia el clúster existente, comprueba Kubero, levanta frontend, API, PostgreSQL y Redis, y deja activo el **ejecutor** en segundo plano. No hace falta iniciar manualmente cada contenedor de k3d ni levantar primero `kubero-wrapper`.
 
-El ejecutor procesa los proyectos aprobados: construye su Dockerfile, publica la imagen en el registro local y despliega con Kubero. También procesa las solicitudes de eliminación y confirma la retirada de recursos e imágenes antes de ocultar el proyecto. Debe estar activo para completar ambas operaciones; los logs quedan en `.local/deploy-worker.out.log` y `.local/deploy-worker.err.log`.
+El ejecutor procesa los proyectos aprobados: despliega los servicios de su Docker Compose en K3s o construye el Dockerfile con Kubero cuando falta Compose. También procesa las solicitudes de eliminación y confirma la retirada de recursos e imágenes antes de ocultar el proyecto. Debe estar activo para completar ambas operaciones; los logs quedan en `.local/deploy-worker.out.log` y `.local/deploy-worker.err.log`.
 
 Los cambios del frontend se reflejan automáticamente. Después de modificar el backend, las dependencias o cambiar de rama, reconstruir con:
 
@@ -194,7 +194,23 @@ La limpieza del registro suspende temporalmente sus escrituras para ejecutar la 
 node scripts/delete-local.mjs --image-repository native-check-680a4d70
 ```
 
-Las solicitudes nuevas y los reenvíos quedan pendientes de validación administrativa. El administrador puede pedir correcciones o aprobar sin exigir una imagen construida previamente. El monitor solo reclama proyectos admitidos y aprobados; construye el Dockerfile del commit presentado, despliega la imagen mediante Kubero y comprueba su disponibilidad antes de marcar el proyecto como desplegado. Esta prueba requiere un Dockerfile en la raíz y no ejecuta empaquetado automático, CI ni transferencia del repositorio.
+Las solicitudes nuevas y los reenvíos quedan pendientes de validación administrativa. El administrador puede pedir correcciones o aprobar sin exigir una imagen construida previamente. El ejecutor trabaja con el commit aprobado y verifica la URL antes de marcar el proyecto como desplegado.
+
+#### Desplegar una página con Docker Compose
+
+En la raíz del repositorio del desarrollador, Atlas busca en este orden: `compose.yaml`, `compose.yml`, `docker-compose.yaml` y `docker-compose.yml`. El primer archivo presente define el despliegue completo. Un error en él detiene el intento. El Dockerfile de la raíz solo se usa directamente cuando faltan los cuatro archivos. Un servicio Compose también puede elegir un Dockerfile mediante `build`.
+
+```yaml
+services:
+  web:
+    image: nginx:stable-alpine
+    ports: ["8080:80"]
+    volumes: ["./public:/usr/share/nginx/html:ro"]
+```
+
+Incluye tu página en `public/index.html`. Atlas publica el puerto interno (80 en el ejemplo) en el dominio asignado. Los demás servicios se comunican por nombre en el namespace del proyecto. Si varios servicios publican puertos, añade `x-atlas-web: nombre-del-servicio` en la raíz para elegir la página. La ruta de salud configurada en Atlas debe responder por HTTP.
+
+El ejecutor admite imágenes, construcciones con contexto del repositorio y Dockerfile, argumentos de construcción, variables del proyecto, puertos TCP, dependencias, comandos y volúmenes con nombre. Los archivos o directorios relativos montados se copian en modo de solo lectura (hasta 700 KB y 512 archivos por montaje). Usa un volumen con nombre para los datos que deban persistir. Para los secretos, configura las variables en Atlas y refiérelas desde Compose. Las opciones no admitidas, entre ellas montajes del host, ejecución privilegiada y redes externas, generan un error de despliegue.
 
 Los fallos técnicos quedan en los logs del proyecto y permiten reintentar sin repetir la admisión. Guardar configuración durante las correcciones conserva las observaciones hasta que el estudiante reenvía la solicitud. La migración 008 devuelve a revisión las solicitudes que seguían esperando la adaptación del flujo anterior.
 

@@ -198,7 +198,7 @@ export default function ProjectDetailPage() {
         )}
         {project.status === 'approved' && (
           <p className="rounded-xl bg-green-50 p-5 text-sm">
-            La solicitud fue aprobada. La construcción con Dockerfile comenzará cuando el ejecutor esté activo.
+            La solicitud fue aprobada. El despliegue comenzará cuando el ejecutor esté activo.
           </p>
         )}
         {project.status === 'corrections' && !project.deletion_requested_at && (

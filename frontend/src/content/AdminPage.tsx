@@ -1,6 +1,7 @@
 import { fieldClassName, fieldLabelClassName, controlClassName } from '../shared/formStyles';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, type Project } from '../api';
+import { projectCiStage } from './projectStages';
 import ProjectCard from './ProjectCard';
 
 export default function AdminPage() {
@@ -37,7 +38,7 @@ export default function AdminPage() {
   }, [load]);
   const visible = projects.filter(
     (project) =>
-      (filter === 'all' || project.status === filter) &&
+      (filter === 'all' || projectCiStage(project) === filter) &&
       `${project.name} ${project.repo_url}`.toLowerCase().includes(query.toLowerCase())
   );
   return (
@@ -45,7 +46,7 @@ export default function AdminPage() {
       <header>
         <h1 className="text-3xl font-semibold">Proyectos</h1>
         <p className="mt-2 text-sm text-atlas-muted">
-          Proyectos registrados y estado de sus despliegues.
+          Proyectos registrados y avance de CI.
         </p>
       </header>
       {error && (
@@ -62,12 +63,15 @@ export default function AdminPage() {
         <div className="my-4 flex flex-wrap gap-2">
           {[
             ['all', 'Todos'],
-            ['pending', 'Pendientes'],
-            ['corrections', 'Por corregir'],
-            ['approved', 'En cola'],
-            ['building', 'Construyendo y desplegando'],
-            ['running', 'Desplegados'],
-            ['failed', 'Fallidos'],
+            ['ci_blocked', 'Pendiente de configuración'],
+            ['ci_queued', 'CI en cola'],
+            ['ci_pending', 'CI en espera'],
+            ['ci_submission_unknown', 'Confirmando solicitud'],
+            ['ci_running', 'Construyendo'],
+            ['ci_verifying', 'Verificando imagen'],
+            ['ci_published', 'Imagen publicada'],
+            ['ci_failed', 'CI fallido'],
+            ['running', 'Despliegues históricos'],
           ].map(([value, label]) => (
             <button key={value} aria-pressed={filter === value} onClick={() => setFilter(value)} className={`rounded-full px-3 py-2 text-xs ${filter === value ? 'bg-atlas-red text-white' : 'bg-atlas-mist'}`}>
               {label}

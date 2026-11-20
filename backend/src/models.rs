@@ -65,6 +65,8 @@ impl From<User> for UserResponse {
 #[derive(Debug, Serialize, Deserialize, FromRow)]
 pub struct Project {
     #[sqlx(default)]
+    pub ci_managed: bool,
+    #[sqlx(default)]
     pub deletion_requested_at: Option<DateTime<Utc>>,
     #[sqlx(default)]
     pub deletion_error: Option<String>,
@@ -99,8 +101,10 @@ pub struct Project {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CreateProjectRequest {
+    #[serde(default = "Uuid::new_v4")]
+    pub request_id: Uuid,
     pub name: String,
     pub repo_url: String,
     #[serde(default = "default_branch")]
@@ -286,6 +290,8 @@ mod correction_tests {
 
 #[derive(Debug, Serialize)]
 pub struct ProjectResponse {
+    pub ci_managed: bool,
+    pub ci: Option<crate::ci::CiRun>,
     pub deletion_requested_at: Option<DateTime<Utc>>,
     pub deletion_error: Option<String>,
     pub id: Uuid,
@@ -309,6 +315,8 @@ pub struct ProjectResponse {
 impl From<Project> for ProjectResponse {
     fn from(p: Project) -> Self {
         Self {
+            ci_managed: p.ci_managed,
+            ci: None,
             id: p.id,
             deletion_requested_at: p.deletion_requested_at,
             deletion_error: p.deletion_error,

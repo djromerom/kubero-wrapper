@@ -7,7 +7,7 @@ export default function ProjectDeletion({ project, onRequested, onDeleted }: { p
   const requested = Boolean(project.deletion_requested_at);
 
   async function remove() {
-    if (!requested && !confirm('Se retirarán la aplicación, sus servicios, datos e imágenes. El proyecto desaparecerá de Atlas solo al terminar. ¿Eliminar proyecto?')) return;
+    if (!requested && !confirm('Se archivará el proyecto en Atlas. Las imágenes y el historial se conservan; no se eliminarán recursos externos. ¿Archivar proyecto?')) return;
     setSending(true);
     setError('');
     let accepted = false;
@@ -22,18 +22,20 @@ export default function ProjectDeletion({ project, onRequested, onDeleted }: { p
     } finally { setSending(false); }
   }
 
+  if (!project.ci_managed) return <p className="text-sm text-atlas-muted">Los recursos históricos se conservan. Su retirada requiere la integración de CD.</p>;
+
   return (
-    <section aria-label="Eliminar proyecto" className={`my-5 rounded-xl border p-4 ${requested ? 'border-amber-300 bg-amber-50' : 'border-atlas-mist'}`}>
+    <section aria-label="Archivar proyecto" className={`my-5 rounded-xl border p-4 ${requested ? 'border-amber-300 bg-amber-50' : 'border-atlas-mist'}`}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <h2 className="text-sm font-semibold">{requested ? 'Eliminación del proyecto' : 'Eliminar proyecto'}</h2>
+          <h2 className="text-sm font-semibold">{requested ? 'Eliminación del proyecto' : 'Archivar proyecto'}</h2>
           <p role="status" className="mt-1 text-sm text-atlas-muted">
-            {project.deletion_error ? 'La eliminación no terminó. El proyecto sigue visible y puedes reintentar.' : requested ? 'Esperando al ejecutor o retirando los recursos e imágenes. El proyecto desaparecerá cuando se confirme la limpieza.' : 'Retira la aplicación, sus servicios, datos e imágenes del clúster local.'}
+            {project.deletion_error ? 'La eliminación no terminó. El proyecto sigue visible y puedes reintentar.' : requested ? 'Solicitud histórica conservada. La retirada de recursos requiere la futura integración de CD.' : 'Archiva el proyecto sin eliminar imágenes ni recursos externos.'}
           </p>
         </div>
         {(!requested || project.deletion_error) && (
           <button type="button" disabled={sending || project.status === 'building'} onClick={() => void remove()} className="rounded-lg bg-atlas-red px-4 py-2 text-sm text-white disabled:opacity-50">
-            {sending ? 'Solicitando…' : requested ? 'Reintentar eliminación' : 'Eliminar'}
+            {sending ? 'Solicitando…' : requested ? 'Reintentar eliminación' : 'Archivar'}
           </button>
         )}
       </div>

@@ -1,5 +1,5 @@
 import type { Project } from '../api';
-import { projectStages, type ProjectStageId } from './projectStages';
+import { projectCiStage, projectStages, type ProjectStageId } from './projectStages';
 
 interface Props {
   projects: Project[];
@@ -19,7 +19,7 @@ export default function ProjectProgress({
       <ol className="flex min-w-120 gap-2">
         {projectStages.map((stage) => {
           const count = projects.filter((project) =>
-            stage.statuses.includes(project.status)
+            stage.statuses.includes(projectCiStage(project))
           ).length;
           const selected = selectedStage === stage.id;
 

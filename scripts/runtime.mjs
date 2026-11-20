@@ -74,6 +74,14 @@ export function argumentsFor(argv = process.argv.slice(2)) {
 export function cli(meta, usage, action) {
   if (!process.argv[1] || meta !== pathToFileURL(resolve(process.argv[1])).href) return;
   Promise.resolve().then(() => {
+    // Retired laboratory entry points. Imports remain available for isolated unit tests.
+    const retired = new Set(['setup-k3s.mjs', 'start-k3d.mjs', 'start-local-kubero.mjs',
+      'watch-local-environment.mjs', 'watch-local-deployments.mjs', 'deploy-local.mjs',
+      'deploy-compose.mjs', 'delete-local.mjs', 'install-kubero-builder.mjs', 'check-cluster.mjs',
+      'kubero-build.integration.mjs', 'project-services.integration.mjs', 'admission.integration.mjs']);
+    if (retired.has(fileURLToPath(meta).split(/[\\/]/).at(-1))) {
+      throw new Error('El laboratorio local está retirado. Atlas utiliza CI remoto; consulta docs/ci-integration.md. No se ejecutó ninguna operación de infraestructura.');
+    }
     const args = argumentsFor();
     if (args.help) console.log(usage);
     else return action(args);

@@ -31,7 +31,7 @@ export default function DeploymentSettings({
       active = false;
     };
   }, [id]);
-  const locked = readOnly || ['building', 'approved'].includes(status);
+  const locked = readOnly || status === 'deleted';
   const saveConfiguration = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!config || locked || !valid) return;
@@ -56,10 +56,10 @@ export default function DeploymentSettings({
           {!readOnly && (
             <>
               <p className="text-xs text-atlas-muted">
-                Guardar programa un despliegue con la versión actual de la rama.
+                Esta configuración se conserva para CD. Guardarla no inicia construcciones ni despliegues.
               </p>
               <button disabled={locked || !valid || saving} className="rounded-lg bg-atlas-red px-4 py-2 text-sm text-white disabled:opacity-50">
-                {saving ? 'Guardando…' : 'Guardar y desplegar'}
+                {saving ? 'Guardando…' : 'Guardar configuración'}
               </button>
             </>
           )}

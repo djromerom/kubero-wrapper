@@ -37,6 +37,8 @@ export type CorrectionField = 'name' | 'repo_url' | 'branch' | 'purpose' | 'requ
 export type ProjectCorrections = Partial<Record<CorrectionField, string>>;
 
 export interface Project {
+  ci_managed?: boolean;
+  ci?: CiRun | null;
   deletion_requested_at?: string | null;
   deletion_error?: string | null;
   id: string;
@@ -72,6 +74,24 @@ export interface Project {
   domain: string | null;
   webhook_url: string | null;
   created_at: string;
+}
+
+export interface CiRun {
+  id: string;
+  project_id: string;
+  status: string;
+  mode: string;
+  commit_sha: string;
+  branch: string;
+  pipeline_id: number | null;
+  pipeline_number: number | null;
+  woodpecker_repo_id: number | null;
+  image_reference: string | null;
+  image_digest: string | null;
+  platform: string;
+  message: string | null;
+  created_at: string;
+  completed_at: string | null;
 }
 
 export interface Build {
@@ -176,6 +196,8 @@ export interface GithubBranchesResponse {
   branches: GithubBranch[];
 }
 export const api = {
+  listCiRuns: (id: string) => request<CiRun[]>(`/projects/${id}/ci/runs`),
+  retryCi: (id: string) => request<void>(`/projects/${id}/ci/retry`, { method: 'POST' }),
   retryDeployment: (id: string) =>
     request<void>(`/projects/${id}/deployment/retry`, { method: 'POST' }),
   health: () => request<{ status: string }>('/health'),
@@ -191,6 +213,7 @@ export const api = {
   getProject: (id: string) => request<Project>(`/projects/${id}`, { cache: 'no-store' }),
 
   createProject: (data: {
+    request_id?: string;
     name: string;
     repo_url: string;
     branch: string;

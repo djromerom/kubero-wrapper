@@ -149,7 +149,7 @@ impl Fixture {
                 StatusCode::OK,
             )
             .await?;
-        ensure!(p["status"] == "approved", "New projects must enter the deployment queue");
+        ensure!(p["status"] == "pending", "CI must not imply deployment");
         self.request(
             Method::GET,
             &route,
@@ -160,7 +160,7 @@ impl Fixture {
         .await?;
         self.request(
             Method::POST,
-            &format!("{route}/deployment/retry"),
+            &format!("{route}/ci/retry"),
             &other_token,
             json!({}),
             StatusCode::NOT_FOUND,
@@ -183,7 +183,7 @@ impl Fixture {
             json!({"purpose":"Updated purpose"}), StatusCode::BAD_REQUEST).await?;
         let resubmitted = self.request(Method::POST, &format!("{route}/resubmit"), &owner_token,
             json!({"name":"Updated project", "purpose":"Updated purpose"}), StatusCode::OK).await?;
-        ensure!(resubmitted["status"] == "approved", "Resubmission did not enter the deployment queue");
+        ensure!(resubmitted["status"] == "pending" && resubmitted["ci"]["status"] == "blocked", "CI disabled must be explicit");
         ensure!(resubmitted["source_commit"] == "a".repeat(40), "Resubmission lost the registered commit");
         ensure!(resubmitted["correction_fields"] == json!([]) && resubmitted["review_note"].is_null(), "Stale corrections persisted");
 
@@ -191,14 +191,15 @@ impl Fixture {
         sqlx::query("UPDATE projects SET status='building' WHERE id=$1").bind(project).execute(&self.db).await?;
         self.request(Method::DELETE, &route, &owner_token, Value::Null, StatusCode::CONFLICT).await?;
         sqlx::query("UPDATE projects SET status='running' WHERE id=$1").bind(project).execute(&self.db).await?;
-        let deletion = self.request(Method::DELETE, &route, &owner_token, Value::Null, StatusCode::ACCEPTED).await?;
-        ensure!(deletion["deleted"] == false, "Deletion was reported as complete before resource verification");
+        self.request(Method::DELETE, &route, &owner_token, Value::Null, StatusCode::CONFLICT).await?;
+        self.request(Method::DELETE, &format!("/admin/projects/{project}"), admin_token, Value::Null, StatusCode::CONFLICT).await?;
         let visible = self.request(Method::GET, &route, &owner_token, Value::Null, StatusCode::OK).await?;
-        ensure!(visible["status"] == "running" && visible["deletion_requested_at"].is_string(), "Queued deletion hid the project prematurely");
-        sqlx::query("UPDATE projects SET deletion_error='Registry unavailable' WHERE id=$1").bind(project).execute(&self.db).await?;
-        self.request(Method::DELETE, &format!("/admin/projects/{project}"), admin_token, Value::Null, StatusCode::ACCEPTED).await?;
-        let visible = self.request(Method::GET, &route, &owner_token, Value::Null, StatusCode::OK).await?;
-        ensure!(visible["deletion_error"].is_null(), "Retry did not clear the previous deletion failure");
+        ensure!(visible["status"] == "running", "Historical deployment changed");
+        self.request(Method::POST, &format!("{route}/deployment/retry"), &owner_token, Value::Null, StatusCode::SERVICE_UNAVAILABLE).await?;
+        // CI-only project can be archived without deleting resources or history.
+        sqlx::query("UPDATE projects SET status='pending' WHERE id=$1").bind(project).execute(&self.db).await?;
+        let archived = self.request(Method::DELETE, &route, &owner_token, Value::Null, StatusCode::OK).await?;
+        ensure!(archived["deleted"] == true, "CI project was not archived");
         Ok(())
     }
 }
@@ -231,6 +232,7 @@ async fn real_http_and_client_integration() -> Result<()> {
             .env("HOST", "127.0.0.1")
             .env("PORT", port.to_string())
             .env("JWT_SECRET", "integration-test-only-secret")
+            .env("ATLAS_CI_ENABLED", "false")
             .env("KUBERNETES_REQUIRED", "false")
             .env("KUBE_CONFIG_PATH", "/nonexistent-atlas-test-kubeconfig")
             .env("GITHUB_APP_ID", "")

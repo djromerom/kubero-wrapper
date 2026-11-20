@@ -30,6 +30,7 @@ const validSubdomain = (name: string) => /^[a-z0-9](?:[a-z0-9-]{1,47}[a-z0-9])$/
 
 export default function CreateProjectModal({ open, onClose, onCreated }: Props) {
   const { user } = useAuth();
+  const requestId = useRef(crypto.randomUUID());
   const dialog = useRef<HTMLDialogElement>(null);
   const continueButton = useRef<HTMLButtonElement>(null);
   const [step, setStep] = useState(1);
@@ -95,6 +96,7 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
       dialog.current?.close();
       return;
     }
+    requestId.current = crypto.randomUUID();
     setStep(1);
     setDraft({ ...initial });
     setError('');
@@ -229,6 +231,7 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
     setSending(true);
     try {
       await api.createProject({
+        request_id: requestId.current,
         name: projectName,
         repo_url: `https://github.com/${draft.repo}`,
         branch: draft.branch,
@@ -281,7 +284,7 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
             Nuevo proyecto
           </h2>
           <p className="text-sm text-atlas-muted">
-            Registra tu repositorio para iniciar automáticamente la construcción y el despliegue.
+            Registra tu repositorio para solicitar la construcción de su imagen.
           </p>
         </header>
         <ol className="relative flex items-center justify-between gap-2 border-b border-atlas-mist px-6 py-5 before:absolute before:inset-x-8 before:top-1/2 before:h-px before:bg-atlas-red before:content-[''] max-[480px]:gap-[.2rem] max-[480px]:px-3" aria-label="Pasos de registro">
@@ -381,7 +384,7 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
             </button>
           )}
           <button type="submit" disabled={sending || githubLinked !== true || loadingGithub} className="inline-flex items-center gap-2 rounded-lg bg-atlas-red px-4 py-2 text-sm text-white hover:bg-atlas-ink disabled:opacity-50">
-            {sending ? 'Enviando…' : step === 3 ? 'Registrar y desplegar' : 'Siguiente'}
+            {sending ? 'Enviando…' : step === 3 ? 'Registrar y construir' : 'Siguiente'}
             {step < 3 && <IconChevronRight size={16} stroke={2} aria-hidden="true" />}
           </button>
         </footer>

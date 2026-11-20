@@ -46,6 +46,7 @@ pub(crate) struct LatestCommitQuery {
 fn client() -> AppResult<reqwest::Client> {
     reqwest::Client::builder()
         .timeout(Duration::from_secs(10))
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|error| AppError::Internal(error.to_string()))
 }
@@ -197,7 +198,7 @@ pub(crate) async fn callback(
         .ok_or_else(|| AppError::BadRequest("GitHub did not return an access token".into()))?;
 
     let user_response = http
-        .get("https://api.github.com/user")
+        .get(format!("{}/user", state.config.github_api_url))
         .bearer_auth(access_token)
         .header("User-Agent", USER_AGENT)
         .send()
@@ -224,7 +225,7 @@ pub(crate) async fn callback(
         .github_app_id
         .parse::<i64>()
         .map_err(|_| AppError::Internal("GITHUB_APP_ID must be a number".into()))?;
-    let installations = fetch_installations(&http, access_token).await?;
+    let installations = fetch_installations(&state, &http, access_token).await?;
     let valid_installation = installations.iter().any(|installation| {
         installation.get("app_id").and_then(Value::as_i64) == Some(configured_app_id)
             && query.installation_id.map_or(true, |expected| {
@@ -275,30 +276,28 @@ async fn account(state: &AppState, user_id: Uuid) -> AppResult<GitHubAccount> {
     .ok_or_else(|| AppError::BadRequest("GitHub account is not linked".into()))
 }
 
-async fn fetch_installations(http: &reqwest::Client, token: &str) -> AppResult<Vec<Value>> {
-    let response = http
-        .get("https://api.github.com/user/installations")
-        .bearer_auth(token)
-        .header("User-Agent", USER_AGENT)
-        .query(&[("per_page", "100")])
-        .send()
-        .await
-        .map_err(github_connection_error)?;
-    if response.status() == StatusCode::UNAUTHORIZED {
-        return Err(AppError::Unauthorized);
+async fn github_pages(state: &AppState, http: &reqwest::Client, token: &str, path: &str, field: Option<&str>) -> AppResult<Vec<Value>> {
+    crate::ci_clients::secure_base(&state.config.github_api_url, state.config.ci.allow_http_loopback)
+        .map_err(|_| AppError::Internal("GITHUB_API_URL no válido".into()))?;
+    let mut all = Vec::new();
+    for page in 1..=100 {
+        let response = http.get(format!("{}{path}",state.config.github_api_url))
+            .bearer_auth(token).header("User-Agent",USER_AGENT)
+            .query(&[("per_page",100),("page",page)]).send().await.map_err(github_connection_error)?;
+        if response.status() == StatusCode::UNAUTHORIZED { return Err(AppError::Unauthorized); }
+        if response.status() == StatusCode::FORBIDDEN { return Err(AppError::Forbidden); }
+        if !response.status().is_success() { return Err(AppError::ServiceUnavailable("No se pudo consultar el acceso a GitHub.".into())); }
+        let data: Value = response.json().await.map_err(github_connection_error)?;
+        let values = field.map_or(&data, |key| &data[key]).as_array()
+            .ok_or_else(|| AppError::ServiceUnavailable("Respuesta de GitHub no válida.".into()))?;
+        all.extend(values.iter().cloned());
+        if values.len() < 100 { return Ok(all); }
     }
-    if !response.status().is_success() {
-        return Err(AppError::BadRequest("Unable to retrieve GitHub installations".into()));
-    }
-    let data: Value = response
-        .json()
-        .await
-        .map_err(github_connection_error)?;
-    Ok(data
-        .get("installations")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default())
+    Err(AppError::ServiceUnavailable("La consulta de GitHub excede el límite de páginas.".into()))
+}
+
+async fn fetch_installations(state: &AppState, http: &reqwest::Client, token: &str) -> AppResult<Vec<Value>> {
+    github_pages(state, http, token, "/user/installations", Some("installations")).await
 }
 
 async fn installation_ids(state: &AppState, account: &GitHubAccount) -> AppResult<Vec<i64>> {
@@ -307,7 +306,7 @@ async fn installation_ids(state: &AppState, account: &GitHubAccount) -> AppResul
         .github_app_id
         .parse::<i64>()
         .map_err(|_| AppError::Internal("GITHUB_APP_ID must be a number".into()))?;
-    Ok(fetch_installations(&client()?, &account.access_token)
+    Ok(fetch_installations(state, &client()?, &account.access_token)
         .await?
         .into_iter()
         .filter(|item| item.get("app_id").and_then(Value::as_i64) == Some(app_id))
@@ -319,36 +318,11 @@ async fn repository_values(state: &AppState, account: &GitHubAccount) -> AppResu
     let http = client()?;
     let mut repositories = HashMap::new();
     for installation_id in installation_ids(state, account).await? {
-        let response = http
-            .get(format!(
-                "https://api.github.com/user/installations/{installation_id}/repositories"
-            ))
-            .bearer_auth(&account.access_token)
-            .header("User-Agent", USER_AGENT)
-            .query(&[("per_page", "100")])
-            .send()
-            .await
-            .map_err(github_connection_error)?;
-        if !response.status().is_success() {
-            continue;
-        }
-        let data: Value = response
-            .json()
-            .await
-            .map_err(github_connection_error)?;
-        for repository in data
-            .get("repositories")
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default()
-        {
-            let personal = repository.get("owner").and_then(|owner| owner.get("login"))
-                .and_then(Value::as_str)
-                .is_some_and(|login| login.eq_ignore_ascii_case(&account.github_login));
-            if !personal { continue; }
-            if let Some(id) = repository.get("id").and_then(Value::as_i64) {
-                repositories.insert(id, repository);
-            }
+        // This endpoint intersects the GitHub App installation with this user's access,
+        // including organizations; a service account is never used to authorize the user.
+        for repository in github_pages(state, &http, &account.access_token,
+            &format!("/user/installations/{installation_id}/repositories"), Some("repositories")).await? {
+            if let Some(id) = repository.get("id").and_then(Value::as_i64) { repositories.insert(id, repository); }
         }
     }
     Ok(repositories.into_values().collect())
@@ -360,6 +334,7 @@ async fn verify_repository(
     owner: &str,
     repo: &str,
 ) -> AppResult<()> {
+    if !crate::ci_clients::valid_github_name(&format!("{owner}/{repo}")) { return Err(AppError::BadRequest("Repositorio no válido".into())); }
     let expected = format!("{owner}/{repo}").to_lowercase();
     if repository_values(state, account).await?.iter().any(|repository| {
         repository
@@ -388,25 +363,13 @@ pub(crate) async fn branches(
 ) -> AppResult<Json<Value>> {
     let account = account(&state, auth_user.id).await?;
     verify_repository(&state, &account, &owner, &repo).await?;
-    let response = client()?
-        .get(format!("https://api.github.com/repos/{owner}/{repo}/branches"))
-        .bearer_auth(&account.access_token)
-        .header("User-Agent", USER_AGENT)
-        .query(&[("per_page", "100")])
-        .send()
-        .await
-        .map_err(github_connection_error)?;
-    if !response.status().is_success() {
-        return Err(AppError::BadRequest("Unable to retrieve GitHub branches".into()));
-    }
-    let branches: Value = response
-        .json()
-        .await
-        .map_err(github_connection_error)?;
+    let branches = github_pages(&state, &client()?, &account.access_token,
+        &format!("/repos/{owner}/{repo}/branches"), None).await?;
     Ok(Json(json!({ "owner": owner, "repository": repo, "branches": branches })))
 }
 
 async fn latest_commit_value(
+    state: &AppState,
     account: &GitHubAccount,
     owner: &str,
     repo: &str,
@@ -416,7 +379,7 @@ async fn latest_commit_value(
         return Err(AppError::BadRequest("Branch cannot be empty".into()));
     }
     let response = client()?
-        .get(format!("https://api.github.com/repos/{owner}/{repo}/commits"))
+        .get(format!("{}/repos/{owner}/{repo}/commits",state.config.github_api_url))
         .bearer_auth(&account.access_token)
         .header("User-Agent", USER_AGENT)
         .query(&[("sha", branch), ("per_page", "1")])
@@ -443,7 +406,7 @@ pub(crate) async fn latest_commit(
 ) -> AppResult<Json<Value>> {
     let account = account(&state, auth_user.id).await?;
     verify_repository(&state, &account, &owner, &repo).await?;
-    let commit = latest_commit_value(&account, &owner, &repo, &query.branch).await?;
+    let commit = latest_commit_value(&state, &account, &owner, &repo, &query.branch).await?;
     Ok(Json(json!({
         "owner": owner,
         "repository": repo,
@@ -460,12 +423,17 @@ fn parse_repository_url(repo_url: &str) -> AppResult<(String, String)> {
         .trim_end_matches('/')
         .trim_end_matches(".git");
     let parts = path.split('/').collect::<Vec<_>>();
-    if parts.len() != 2 || parts.iter().any(|part| part.is_empty()) {
+    if !crate::ci_clients::valid_github_name(path) {
         return Err(AppError::BadRequest(
             "Expected repository URL in the form https://github.com/owner/repository".into(),
         ));
     }
     Ok((parts[0].into(), parts[1].into()))
+}
+
+pub fn canonical_repository_url(repo_url: &str) -> AppResult<String> {
+    let (owner, repo) = parse_repository_url(repo_url)?;
+    Ok(format!("https://github.com/{owner}/{repo}"))
 }
 
 /// Revalidates ownership and branch at project creation time; selectors in the
@@ -478,15 +446,15 @@ pub(crate) async fn validate_project_source(
 ) -> AppResult<(String, String)> {
     let account = account(state, user_id).await?;
     let (owner, repo) = parse_repository_url(repo_url)?;
-    if !owner.eq_ignore_ascii_case(&account.github_login) {
-        return Err(AppError::BadRequest("Selecciona un repositorio de tu cuenta personal de GitHub.".into()));
-    }
     verify_repository(state, &account, &owner, &repo).await?;
-    let commit = latest_commit_value(&account, &owner, &repo, branch).await?;
+    let commit = latest_commit_value(&state, &account, &owner, &repo, branch).await?;
     let sha = commit
         .get("sha")
         .and_then(Value::as_str)
         .ok_or_else(|| AppError::Internal("GitHub commit SHA not found".into()))?;
+    if sha.len() != 40 || !sha.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err(AppError::ServiceUnavailable("GitHub no devolvió un commit válido.".into()));
+    }
     let message = commit
         .get("commit")
         .and_then(|value| value.get("message"))

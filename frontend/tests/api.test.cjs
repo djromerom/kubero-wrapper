@@ -64,10 +64,10 @@ test('creation and legacy corrections send their real API payloads', async () =>
 
 });
 
-test('deployment retries use the deployment endpoint', async () => {
+test('CI retries use the CI endpoint', async () => {
   const calls = backend({});
-  await api.retryDeployment('project-1');
-  assert.equal(calls[0].url, '/api/projects/project-1/deployment/retry');
+  await api.retryCi('project-1');
+  assert.equal(calls[0].url, '/api/projects/project-1/ci/retry');
   assert.equal(calls[0].options.method, 'POST');
 });
 

@@ -1,10 +1,11 @@
 mod auth;
+mod ci;
+mod ci_clients;
 mod config;
 mod db;
 mod error;
 mod events;
 mod github;
-mod kubero;
 mod models;
 mod routes;
 mod ws;
@@ -21,7 +22,16 @@ async fn main() -> anyhow::Result<()> {
 
     dotenvy::dotenv().ok();
 
-    let cfg = config::Config::from_env();
+    let cfg = config::Config::from_env()?;
+    if std::env::args().any(|arg| arg == "--check-ci-config") {
+        anyhow::ensure!(!cfg.ci.enabled, "La comprobación offline requiere ATLAS_CI_ENABLED=false");
+        anyhow::ensure!(!cfg.ci.allow_http_loopback, "La configuración de infraestructura requiere HTTPS");
+        ci_clients::CiClients::new(cfg.ci.clone())?;
+        println!("Configuración CI válida localmente. CI deshabilitado; sin conexiones externas ni migraciones.");
+        return Ok(());
+    }
+    ci_clients::secure_base(&cfg.github_api_url, cfg.ci.allow_http_loopback)
+        .map_err(anyhow::Error::msg)?;
 
     let pool = db::init_pool(&cfg.database_url).await?;
     db::run_migrations(&pool).await?;
@@ -29,26 +39,8 @@ async fn main() -> anyhow::Result<()> {
 
     let event_bus = events::EventBus::new(&cfg.redis_url).await;
 
-    let kubero = match kubero::KuberoManager::new_in_cluster().await {
-        Ok(m) => {
-            tracing::info!("Connected to Kubernetes cluster (in-cluster)");
-            Some(m)
-        }
-        Err(_) => {
-            tracing::warn!("No in-cluster config, trying kubeconfig file");
-            match kubero::KuberoManager::new(&cfg.kube_config_path).await {
-                Ok(m) => {
-                    tracing::info!("Connected to Kubernetes cluster using kubeconfig");
-                    Some(m)
-                }
-                Err(error) if cfg.kubernetes_required => return Err(error.into()),
-                Err(error) => {
-                    tracing::warn!("Kubernetes unavailable; cluster operations are disabled: {}", error);
-                    None
-                }
-            }
-        }
-    };
+    // CI phase: never connect to Kubernetes, including implicit in-cluster credentials.
+    let ci_clients = if cfg.ci.enabled { Some(ci_clients::CiClients::new(cfg.ci.clone())?) } else { None };
 
     let ws_manager = ws::WsManager::new();
 
@@ -61,10 +53,11 @@ async fn main() -> anyhow::Result<()> {
         config: cfg.clone(),
         db: pool,
         event_bus,
-        kubero,
+        ci_clients,
         ws_manager: ws_manager.clone(),
     };
 
+    ci::start_worker(state.clone());
     let app = routes::create_router(state).layer(cors);
 
     let addr = SocketAddr::new(

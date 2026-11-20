@@ -4,7 +4,7 @@ import { api, type Project } from '../api';
 import CreateProjectModal from './CreateProjectModal';
 import ProjectCard from './ProjectCard';
 import ProjectProgress from './ProjectProgress';
-import { projectStages, type ProjectStageId } from './projectStages';
+import { projectCiStage, projectStages, type ProjectStageId } from './projectStages';
 import { IconChevronRight } from '@tabler/icons-react';
 import { useToast } from '../shared/ToastProvider';
 export default function DashboardPage() {
@@ -43,14 +43,14 @@ export default function DashboardPage() {
   const corrections = projects.filter((p) => p.status === 'corrections');
   const activeStage = projectStages.find((stage) => stage.id === selectedStage);
   const visibleProjects = projects.filter((project) =>
-    activeStage ? activeStage.statuses.includes(project.status) : project.status !== 'corrections'
+    activeStage ? activeStage.statuses.includes(projectCiStage(project)) : project.status !== 'corrections'
   );
 
   function selectStage(stage: ProjectStageId) {
     setSelectedStage((current) => (current === stage ? null : stage));
   }
   const refreshAfterCreation = () => {
-    showToast('Proyecto registrado. Despliegue programado.');
+    showToast('Proyecto registrado. Consulta el avance de CI.');
     loadProjects();
   };
 
@@ -60,7 +60,7 @@ export default function DashboardPage() {
         <div>
           <h1 className="text-3xl font-semibold">Mis proyectos</h1>
           <p className="text-sm text-atlas-muted">
-            Gestiona tus aplicaciones y sigue cada despliegue.
+            Gestiona tus aplicaciones y sigue la construcción de sus imágenes.
           </p>
         </div>
         <div className="flex gap-4 items-center">

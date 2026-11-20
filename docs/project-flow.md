@@ -1,13 +1,26 @@
-## Registration
-Each developer registers and deploys their own projects. After signing in, they link their GitHub account and select the repository, branch, project name, URL, description and optional course.
+## Estado implementado: registro y CI
 
-Atlas checks repository access, resolves the current commit and records the project. Registration immediately queues deployment. The worker starts processing automatically, and the developer follows progress and logs from the project page.
+El desarrollador vincula GitHub, selecciona repositorio y rama y registra el
+proyecto. Atlas valida el acceso tanto a repositorios personales como a
+organizaciones autorizadas para su GitHub App. Guarda el commit y una solicitud
+CI de forma atómica e idempotente.
 
-The current deployment queue uses the internal status `approved`, displayed as **En cola**, for compatibility with existing data. Saving deployment configuration or retrying a failed deployment queues another attempt.
+`ci_runs` registra la solicitud, ejecución Woodpecker, commit, imagen y digest.
+Los estados son `blocked`, `queued`, `submitting`, `submission_unknown`,
+`pending`, `running`, `verifying`, `published`, `failed` y `cancelled`.
+`published` significa imagen verificada para linux/arm64; no implica despliegue.
+El campo histórico `projects.status` queda separado de CI.
 
-Account provisioning, project quotas and time-limited access are future configuration requirements. Google sign-in currently appears as a disabled frontend option.
+El backend no conecta con Kubernetes. Guardar configuración de despliegue sólo
+la conserva. Archivar un proyecto CI conserva historial e imágenes; los recursos
+históricos requieren una futura retirada coordinada, no se borran en esta fase.
 
-The following integration stages describe the target CI pipeline. The local implementation currently builds and deploys Compose or Dockerfile projects directly.
+[Contrato y requisitos externos de la configuración central](ci-integration.md).
+Las cuotas, accesos temporales y Google funcional siguen pendientes.
+
+## Diseño futuro (no implementado en esta fase)
+
+Las siguientes etapas son documentación de destino, no capacidades verificadas.
 
 ## Integration
 CI provisioning based on visibility, application packaging, automated testing, security checks, and publication of the approved OCI image to the registry. After successful publication, the project moves to **Deployment**.
